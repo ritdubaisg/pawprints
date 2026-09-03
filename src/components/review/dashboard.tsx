@@ -393,6 +393,14 @@ export function ReviewDashboard({
                       {selectedPetition.title}
                     </h2>
                   </div>
+                  <div className="flex flex-col gap-0.5 text-sm text-muted-foreground min-w-0">
+                    <span className="truncate">
+                      Issuer: {selectedPetition.author}
+                    </span>
+                    <span className="truncate">
+                      Email: {selectedPetition.authorEmail || "Unavailable"}
+                    </span>
+                  </div>
                   <div className="hidden md:flex items-center gap-3 text-sm text-muted-foreground">
                     <span className="flex items-center gap-1.5">
                       <Clock className="h-3.5 w-3.5" />

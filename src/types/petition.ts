@@ -30,6 +30,7 @@ export interface Petition {
   description: string;
   tags: Tag[];
   author: string;
+  authorEmail?: string;
   authorId?: string;
   signatures: number;
   targetSignatures: number;
