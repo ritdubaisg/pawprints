@@ -115,19 +115,6 @@ const Header = ({ hasAdminAccess, isSuperAdmin }: HeaderProps) => {
                     className={cn(
                       navigationMenuTriggerStyle(),
 
-                      "bg-transparent text-white hover:bg-white/20 hover:text-white focus:bg-white/20 focus:text-white data-[active]:bg-white/20 data-[state=open]:bg-white/20",
-                    )}
-                  >
-                    <Link href="/about">About</Link>
-                  </NavigationMenuLink>
-                </NavigationMenuItem>
-
-                <NavigationMenuItem>
-                  <NavigationMenuLink
-                    asChild
-                    className={cn(
-                      navigationMenuTriggerStyle(),
-
                       "bg-transparent text-white hover:bg-white/20 hover:text-white focus:bg-white/20 focus:text-white",
                     )}
                   >
@@ -145,6 +132,19 @@ const Header = ({ hasAdminAccess, isSuperAdmin }: HeaderProps) => {
                     )}
                   >
                     <Link href="/create">Create</Link>
+                  </NavigationMenuLink>
+                </NavigationMenuItem>
+
+                <NavigationMenuItem>
+                  <NavigationMenuLink
+                    asChild
+                    className={cn(
+                      navigationMenuTriggerStyle(),
+
+                      "bg-transparent text-white hover:bg-white/20 hover:text-white focus:bg-white/20 focus:text-white data-[active]:bg-white/20 data-[state=open]:bg-white/20",
+                    )}
+                  >
+                    <Link href="/about">About</Link>
                   </NavigationMenuLink>
                 </NavigationMenuItem>
               </NavigationMenuList>
@@ -366,13 +366,6 @@ const Header = ({ hasAdminAccess, isSuperAdmin }: HeaderProps) => {
                   )}
                   <button
                     type="button"
-                    onClick={() => handleNavigate("/about")}
-                    className="text-left text-lg font-medium hover:text-[#F76902] transition-colors"
-                  >
-                    About
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => handleNavigate("/explore")}
                     className="text-left text-lg font-medium hover:text-[#F76902] transition-colors"
                   >
@@ -384,6 +377,13 @@ const Header = ({ hasAdminAccess, isSuperAdmin }: HeaderProps) => {
                     className="text-left text-lg font-medium hover:text-[#F76902] transition-colors"
                   >
                     Create
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate("/about")}
+                    className="text-left text-lg font-medium hover:text-[#F76902] transition-colors"
+                  >
+                    About
                   </button>
                   {!user && (
                     <>
