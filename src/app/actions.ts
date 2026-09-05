@@ -127,6 +127,7 @@ export async function getPendingPetitions(): Promise<Petition[]> {
       id: u.id,
       description: u.description,
       created_at: u.createdAt.toISOString(),
+      author: u.author,
     })),
     old_id: p.oldId,
   }));
@@ -184,6 +185,7 @@ export async function getAdminPetitions(): Promise<Petition[]> {
       id: u.id,
       description: u.description,
       created_at: u.createdAt.toISOString(),
+      author: u.author,
     })),
     old_id: p.oldId,
   }));
@@ -576,6 +578,7 @@ export async function getPetitions(): Promise<Petition[]> {
       id: u.id,
       description: u.description,
       created_at: u.createdAt.toISOString(),
+      author: u.author,
     })),
     old_id: p.oldId,
   }));
@@ -827,6 +830,7 @@ export async function getUserProfile() {
       id: u.id,
       description: u.description,
       created_at: u.createdAt.toISOString(),
+      author: u.author,
     })),
     old_id: p.oldId,
   });
@@ -911,6 +915,7 @@ export async function addUpdate(petitionId: number, description: string) {
   const update = await prisma.update.create({
     data: {
       description: sanitizeHtml(description, sanitizeOptions),
+      author: tokens.decodedToken.name || tokens.decodedToken.email || "Staff",
       petitions: { connect: { id: petitionId } },
     },
   });
@@ -928,11 +933,14 @@ export async function addUpdate(petitionId: number, description: string) {
     );
   }
 
+  await logAction("ADD_UPDATE", { petitionId, updateId: update.id }, tokens.decodedToken.uid);
+
   revalidatePath("/", "layout");
   return {
     id: update.id,
     description: update.description,
     created_at: update.createdAt.toISOString(),
+    author: update.author,
   };
 }
 
@@ -1362,6 +1370,7 @@ export async function getPetition(id: number) {
       id: u.id,
       description: u.description,
       created_at: u.createdAt.toISOString(),
+      author: u.author,
     })),
     old_id: petition.oldId,
   };

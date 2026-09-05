@@ -557,6 +557,11 @@ const PetitionPageClient: React.FC<PetitionPageClientProps> = ({
           <ol className="relative space-y-6 list-none m-0 p-0">
             {petition.updates.map((update) => (
               <li key={update.id} className="relative">
+                {update.author ? (
+                  <p className="text-xs text-muted-foreground">
+                    From {update.author}
+                  </p>
+                ) : null}
                 <article className="md:flex justify-start md:gap-x-24 items-start py-2 md:py-6">
                   <div className="border-t py-2 md:w-24 md:shrink-0">
                     <h3 className="text-xs font-mono text-muted-foreground uppercase">

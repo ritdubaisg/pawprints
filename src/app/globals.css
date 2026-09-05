@@ -201,7 +201,7 @@ body {
 .prose strong,
 .prose b {
   font-weight: 600;
-  color: #1f2937;
+  color: var(--foreground);
 }
 
 .prose em,

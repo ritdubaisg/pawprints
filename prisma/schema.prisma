@@ -119,6 +119,7 @@ model Update {
   id          Int      @id @default(autoincrement())
   description String
   createdAt   DateTime @default(now())
+  author      String?
   petitions   Petition[]
 }
 

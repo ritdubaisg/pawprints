@@ -14,6 +14,7 @@ export interface Update {
   id: number;
   description: string;
   created_at: string;
+  author?: string | null;
 }
 
 export enum PetitionStatus {
