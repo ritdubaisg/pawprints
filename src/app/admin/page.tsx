@@ -2,10 +2,12 @@ import { AdminGuard } from "@/components";
 import AdminDashboard from "@/components/Admin/AdminDashboard";
 import {
   getAuditLogs,
+  getAuditLogActions,
   getUsers,
   getStaffPermissions,
   getCurrentUserId,
 } from "@/app/actions";
+import { ADMIN_PAGE_SIZE } from "@/lib/constants";
 import { redirect } from "next/navigation";
 
 export default async function AdminPage() {
@@ -14,38 +16,57 @@ export default async function AdminPage() {
     redirect("/");
   }
 
-  let logs: any[] = [];
-  let users: any[] = [];
+  // The first page is rendered on the server as before; the dashboard fetches
+  // any page after this one itself.
+  let logPage: {
+    logs: any[];
+    total: number;
+  } = { logs: [], total: 0 };
+  let userPage: {
+    users: any[];
+    total: number;
+    superAdminCount: number;
+  } = { users: [], total: 0, superAdminCount: 0 };
+  let logActions: string[] = [];
 
   try {
     const data = await Promise.all([
       getAuditLogs().catch((e) => {
         console.error("Failed to fetch logs:", e);
-        return [];
+        return { logs: [], total: 0 };
       }),
       getUsers().catch((e) => {
         console.error("Failed to fetch users:", e);
-        return [];
+        return { users: [], total: 0, superAdminCount: 0 };
+      }),
+      getAuditLogActions().catch((e) => {
+        console.error("Failed to fetch log actions:", e);
+        return [] as string[];
       }),
     ]);
-    logs = data[0];
-    users = data[1];
+    logPage = data[0];
+    userPage = data[1];
+    logActions = data[2];
   } catch (error) {
     console.error("Error loading admin data:", error);
   }
 
-  // Needed by the editor dialog to disable self-affecting controls: a
-  // superadmin cannot demote themselves, nor remove the last superadmin.
   const currentUserId = await getCurrentUserId();
-  const superAdminCount = users.filter((u: any) => u.isSuperAdmin).length;
 
   return (
     <AdminGuard>
       <AdminDashboard
-        logs={logs}
-        users={users}
+        initialLogs={logPage.logs}
+        initialLogTotal={logPage.total}
+        logActions={logActions}
+        initialUsers={userPage.users}
+        initialUserTotal={userPage.total}
+        pageSize={ADMIN_PAGE_SIZE}
         currentUserId={currentUserId}
-        superAdminCount={superAdminCount}
+        // Needed by the editor dialog to disable self-affecting controls: a
+        // superadmin cannot demote themselves, nor remove the last superadmin.
+        // Counted in the database, not over the fetched page.
+        superAdminCount={userPage.superAdminCount}
       />
     </AdminGuard>
   );

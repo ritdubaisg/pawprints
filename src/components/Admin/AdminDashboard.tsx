@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Card,
@@ -39,6 +39,8 @@ import { PERMISSIONS } from "@/lib/permissions";
 import { Search, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import EditUserDialog from "./EditUserDialog";
+import { getAuditLogs, getUsers } from "@/app/actions";
+import { toast } from "sonner";
 
 const getPermissionNames = (permInt: number) => {
   if (!permInt) return [];
@@ -129,70 +131,210 @@ function summariseDetails(details: string | null | undefined): string {
 }
 
 interface AdminDashboardProps {
-  logs: any[];
-  users: any[];
+  initialLogs: any[];
+  initialLogTotal: number;
+  logActions: string[];
+  initialUsers: any[];
+  initialUserTotal: number;
+  pageSize: number;
   currentUserId: string | null;
   superAdminCount: number;
 }
 
+/** How long to wait after the last keystroke before querying. */
+const SEARCH_DEBOUNCE_MS = 300;
+
+/** How many numbered buttons the pager shows at once. */
+const PAGE_WINDOW = 4;
+
+/**
+ * The window of page numbers to offer: the current page and its nearest
+ * neighbours, clamped so the window never runs past either end.
+ */
+function pageWindow(current: number, totalPages: number) {
+  if (totalPages <= PAGE_WINDOW) {
+    return Array.from({ length: totalPages }, (_, i) => i + 1);
+  }
+
+  // Keep one page behind the current one visible where there is room, so
+  // stepping forward does not immediately redraw the whole window.
+  const start = Math.max(
+    1,
+    Math.min(current - 1, totalPages - PAGE_WINDOW + 1),
+  );
+
+  return Array.from({ length: PAGE_WINDOW }, (_, i) => start + i);
+}
+
+function Pager({
+  page,
+  totalPages,
+  disabled,
+  onChange,
+  label,
+}: {
+  page: number;
+  totalPages: number;
+  disabled: boolean;
+  onChange: (page: number) => void;
+  label: string;
+}) {
+  return (
+    <nav
+      aria-label={label}
+      className="flex items-center gap-1 self-end sm:self-auto"
+    >
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={disabled || page <= 1}
+        onClick={() => onChange(page - 1)}
+      >
+        Back
+      </Button>
+
+      {pageWindow(page, totalPages).map((n) => (
+        <Button
+          key={n}
+          variant={n === page ? "default" : "outline"}
+          size="sm"
+          className="w-9 px-0"
+          disabled={disabled}
+          aria-current={n === page ? "page" : undefined}
+          aria-label={`Page ${n}`}
+          onClick={() => onChange(n)}
+        >
+          {n}
+        </Button>
+      ))}
+
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={disabled || page >= totalPages}
+        onClick={() => onChange(page + 1)}
+      >
+        Next
+      </Button>
+    </nav>
+  );
+}
+
 export default function AdminDashboard({
-  logs,
-  users,
+  initialLogs,
+  initialLogTotal,
+  logActions,
+  initialUsers,
+  initialUserTotal,
+  pageSize,
   currentUserId,
   superAdminCount,
 }: AdminDashboardProps) {
   // Logs State
+  const [logs, setLogs] = useState<any[]>(initialLogs);
+  const [logTotal, setLogTotal] = useState(initialLogTotal);
+  const [logPage, setLogPage] = useState(1);
+  const [logSearchInput, setLogSearchInput] = useState("");
   const [logSearch, setLogSearch] = useState("");
   const [logActionFilter, setLogActionFilter] = useState("All");
+  const [logLoading, setLogLoading] = useState(false);
   const [viewingLog, setViewingLog] = useState<any | null>(null);
 
   // Users State
+  const [users, setUsers] = useState<any[]>(initialUsers);
+  const [userTotal, setUserTotal] = useState(initialUserTotal);
+  const [userPage, setUserPage] = useState(1);
+  const [userSearchInput, setUserSearchInput] = useState("");
   const [userSearch, setUserSearch] = useState("");
   const [userRoleFilter, setUserRoleFilter] = useState("All");
+  const [userLoading, setUserLoading] = useState(false);
   const [editingUser, setEditingUser] = useState<any | null>(null);
 
-  // Filtered Logs
-  const uniqueActions = useMemo(() => {
-    const actions = new Set(logs.map((log) => log.action));
-    return ["All", ...Array.from(actions)];
-  }, [logs]);
+  // Every action ever recorded, not just those on the page being shown.
+  const actionOptions = ["All", ...logActions];
+  const logPageCount = Math.max(Math.ceil(logTotal / pageSize), 1);
+  const userPageCount = Math.max(Math.ceil(userTotal / pageSize), 1);
 
-  const filteredLogs = useMemo(() => {
-    return logs.filter((log) => {
-      const matchesSearch =
-        logSearch === "" ||
-        log.action.toLowerCase().includes(logSearch.toLowerCase()) ||
-        log.user?.name?.toLowerCase().includes(logSearch.toLowerCase()) ||
-        log.user?.email?.toLowerCase().includes(logSearch.toLowerCase()) ||
-        log.details?.toLowerCase().includes(logSearch.toLowerCase());
+  // Debounce both search boxes so typing does not fire a query per keystroke.
+  useEffect(() => {
+    const timer = setTimeout(
+      () => setLogSearch(logSearchInput),
+      SEARCH_DEBOUNCE_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [logSearchInput]);
 
-      const matchesFilter =
-        logActionFilter === "All" || log.action === logActionFilter;
+  useEffect(() => {
+    const timer = setTimeout(
+      () => setUserSearch(userSearchInput),
+      SEARCH_DEBOUNCE_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [userSearchInput]);
 
-      return matchesSearch && matchesFilter;
-    });
-  }, [logs, logSearch, logActionFilter]);
-
-  // Filtered Users
-  const filteredUsers = useMemo(() => {
-    return users.filter((user) => {
-      const matchesSearch =
-        userSearch === "" ||
-        user.name?.toLowerCase().includes(userSearch.toLowerCase()) ||
-        user.email?.toLowerCase().includes(userSearch.toLowerCase());
-
-      let matchesFilter = true;
-      if (userRoleFilter === "Super Admin") {
-        matchesFilter = user.isSuperAdmin;
-      } else if (userRoleFilter === "Staff") {
-        matchesFilter = user.isStaff && !user.isSuperAdmin;
-      } else if (userRoleFilter === "User") {
-        matchesFilter = !user.isStaff && !user.isSuperAdmin;
+  const loadLogs = useCallback(
+    async (page: number) => {
+      setLogLoading(true);
+      try {
+        const result = await getAuditLogs({
+          page,
+          search: logSearch,
+          action: logActionFilter,
+        });
+        setLogs(result.logs);
+        setLogTotal(result.total);
+        setLogPage(result.page);
+      } catch (error) {
+        console.error(error);
+        toast.error("Failed to load audit logs");
+      } finally {
+        setLogLoading(false);
       }
+    },
+    [logSearch, logActionFilter],
+  );
 
-      return matchesSearch && matchesFilter;
-    });
-  }, [users, userSearch, userRoleFilter]);
+  const loadUsers = useCallback(
+    async (page: number) => {
+      setUserLoading(true);
+      try {
+        const result = await getUsers({
+          page,
+          search: userSearch,
+          role: userRoleFilter,
+        });
+        setUsers(result.users);
+        setUserTotal(result.total);
+        setUserPage(result.page);
+      } catch (error) {
+        console.error(error);
+        toast.error("Failed to load users");
+      } finally {
+        setUserLoading(false);
+      }
+    },
+    [userSearch, userRoleFilter],
+  );
+
+  // A new search or filter starts again from the first page. Both effects skip
+  // their first run, where the server has already supplied that page.
+  const logsMounted = useRef(false);
+  useEffect(() => {
+    if (!logsMounted.current) {
+      logsMounted.current = true;
+      return;
+    }
+    loadLogs(1);
+  }, [logSearch, logActionFilter, loadLogs]);
+
+  const usersMounted = useRef(false);
+  useEffect(() => {
+    if (!usersMounted.current) {
+      usersMounted.current = true;
+      return;
+    }
+    loadUsers(1);
+  }, [userSearch, userRoleFilter, loadUsers]);
 
   return (
     <div className="container mx-auto py-10 px-4">
@@ -218,8 +360,8 @@ export default function AdminDashboard({
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder="Search logs (action, user, details)..."
-                    value={logSearch}
-                    onChange={(e) => setLogSearch(e.target.value)}
+                    value={logSearchInput}
+                    onChange={(e) => setLogSearchInput(e.target.value)}
                     className="pl-8"
                   />
                 </div>
@@ -231,7 +373,7 @@ export default function AdminDashboard({
                     <SelectValue placeholder="Filter by Action" />
                   </SelectTrigger>
                   <SelectContent>
-                    {uniqueActions.map((action) => (
+                    {actionOptions.map((action) => (
                       <SelectItem key={action} value={action}>
                         {action}
                       </SelectItem>
@@ -240,7 +382,11 @@ export default function AdminDashboard({
                 </Select>
               </div>
 
-              <ScrollArea className="h-[600px] border rounded-md">
+              <ScrollArea
+                className={`h-[600px] border rounded-md transition-opacity ${
+                  logLoading ? "opacity-60" : ""
+                }`}
+              >
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -251,17 +397,19 @@ export default function AdminDashboard({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredLogs.length === 0 ? (
+                    {logs.length === 0 ? (
                       <TableRow>
                         <TableCell
                           colSpan={4}
                           className="h-24 text-center text-muted-foreground"
                         >
-                          No logs found matching your criteria.
+                          {logLoading
+                            ? "Loading logs..."
+                            : "No logs found matching your criteria."}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredLogs.map((log) => (
+                      logs.map((log) => (
                         <TableRow key={log.id}>
                           <TableCell className="py-2">
                             <Badge variant="outline">{log.action}</Badge>
@@ -297,8 +445,17 @@ export default function AdminDashboard({
                   </TableBody>
                 </Table>
               </ScrollArea>
-              <div className="mt-4 text-xs text-muted-foreground text-right">
-                Showing {filteredLogs.length} of {logs.length} logs
+              <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <span className="text-xs text-muted-foreground">
+                  Showing {logs.length} of {logTotal} logs
+                </span>
+                <Pager
+                  page={logPage}
+                  totalPages={logPageCount}
+                  disabled={logLoading}
+                  onChange={loadLogs}
+                  label="Audit log pages"
+                />
               </div>
             </CardContent>
           </Card>
@@ -316,8 +473,8 @@ export default function AdminDashboard({
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder="Search users (name, email)..."
-                    value={userSearch}
-                    onChange={(e) => setUserSearch(e.target.value)}
+                    value={userSearchInput}
+                    onChange={(e) => setUserSearchInput(e.target.value)}
                     className="pl-8"
                   />
                 </div>
@@ -337,7 +494,11 @@ export default function AdminDashboard({
                 </Select>
               </div>
 
-              <ScrollArea className="h-[600px] border rounded-md">
+              <ScrollArea
+                className={`h-[600px] border rounded-md transition-opacity ${
+                  userLoading ? "opacity-60" : ""
+                }`}
+              >
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -352,17 +513,19 @@ export default function AdminDashboard({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredUsers.length === 0 ? (
+                    {users.length === 0 ? (
                       <TableRow>
                         <TableCell
                           colSpan={8}
                           className="h-24 text-center text-muted-foreground"
                         >
-                          No users found matching your criteria.
+                          {userLoading
+                            ? "Loading users..."
+                            : "No users found matching your criteria."}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredUsers.map((user) => (
+                      users.map((user) => (
                         <TableRow key={user.id}>
                           <TableCell className="font-medium py-2">
                             {user.name || "No Name"}
@@ -425,8 +588,17 @@ export default function AdminDashboard({
                   </TableBody>
                 </Table>
               </ScrollArea>
-              <div className="mt-4 text-xs text-muted-foreground text-right">
-                Showing {filteredUsers.length} of {users.length} users
+              <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <span className="text-xs text-muted-foreground">
+                  Showing {users.length} of {userTotal} users
+                </span>
+                <Pager
+                  page={userPage}
+                  totalPages={userPageCount}
+                  disabled={userLoading}
+                  onChange={loadUsers}
+                  label="User pages"
+                />
               </div>
             </CardContent>
           </Card>
@@ -440,7 +612,15 @@ export default function AdminDashboard({
           currentUserId={currentUserId}
           superAdminCount={superAdminCount}
           open={!!editingUser}
-          onOpenChange={(open) => !open && setEditingUser(null)}
+          onOpenChange={(open) => {
+            if (open) return;
+            setEditingUser(null);
+            // Role and permission changes revalidate /admin, which used to be
+            // enough to refresh both tables. The rows now live in state, so
+            // the page being viewed has to be refetched explicitly.
+            loadUsers(userPage);
+            loadLogs(logPage);
+          }}
         />
       )}
       {viewingLog && (

@@ -9,6 +9,8 @@ import { PetitionStatus, Petition } from "@/types/petition";
 import { z } from "zod";
 import sanitizeHtml from "sanitize-html";
 import {
+  ADMIN_MAX_PAGE_SIZE,
+  ADMIN_PAGE_SIZE,
   PETITION_DURATION_MS,
   PETITION_THRESHOLD,
   PETITION_TIERS,
@@ -1376,48 +1378,180 @@ export async function getPetition(id: number) {
   };
 }
 
-export async function getAuditLogs() {
-  const tokens = await getTokens(await cookies(), authConfig);
-  if (!tokens) throw new Error("Unauthorized");
-
-  const user = await prisma.user.findUnique({
-    where: { id: tokens.decodedToken.uid },
-  });
-
-  if (!user || !user.isSuperAdmin) {
-    throw new Error("Unauthorized");
+/**
+ * Admin table pagination.
+ *
+ * Both admin tables used to load everything and narrow it in the browser: the
+ * audit log stopped at 100 rows with no way to reach anything older, and the
+ * user list pulled every column of every row alongside two aggregate
+ * subqueries. Search and filtering now run in the query, so only the rows
+ * actually on screen are fetched.
+ *
+ * Both tables page by offset. A cursor would suit the audit log better on its
+ * own terms — it is ordered newest-first and grows while it is being read, so
+ * an entry arriving mid-read shifts everything down a row — but a cursor can
+ * only step one page at a time, and the numbered pager needs to jump straight
+ * to any page. At this size the shift is a cosmetic annoyance; being unable to
+ * reach page seven directly would not be.
+ */
+function clampPageSize(limit?: number) {
+  if (typeof limit !== "number" || !Number.isFinite(limit)) {
+    return ADMIN_PAGE_SIZE;
   }
-
-  return prisma.auditLog.findMany({
-    orderBy: { createdAt: "desc" },
-    include: { user: true },
-    take: 100,
-  });
+  return Math.min(Math.max(Math.trunc(limit), 1), ADMIN_MAX_PAGE_SIZE);
 }
 
-export async function getUsers() {
-  const tokens = await getTokens(await cookies(), authConfig);
-  if (!tokens) throw new Error("Unauthorized");
+/** The search the browser used to run across action, user and details. */
+function auditLogWhere(search?: string, action?: string) {
+  const where: any = {};
 
-  const user = await prisma.user.findUnique({
-    where: { id: tokens.decodedToken.uid },
-  });
-
-  if (!user || !user.isSuperAdmin) {
-    throw new Error("Unauthorized");
+  if (action && action !== "All") {
+    where.action = action;
   }
 
-  return prisma.user.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
-      _count: {
-        select: {
-          createdPetitions: true,
-          signedPetitions: true,
+  const term = search?.trim();
+  if (term) {
+    where.OR = [
+      { action: { contains: term, mode: "insensitive" } },
+      { details: { contains: term, mode: "insensitive" } },
+      { user: { name: { contains: term, mode: "insensitive" } } },
+      { user: { email: { contains: term, mode: "insensitive" } } },
+    ];
+  }
+
+  return where;
+}
+
+export async function getAuditLogs(options?: {
+  page?: number;
+  search?: string;
+  action?: string;
+  limit?: number;
+}) {
+  await requireSuperAdmin();
+
+  const take = clampPageSize(options?.limit);
+  const page = Math.max(Math.trunc(options?.page ?? 1), 1);
+  const where = auditLogWhere(options?.search, options?.action);
+
+  // id breaks ties: two entries written in the same millisecond would
+  // otherwise be free to swap places between pages and appear twice, or not
+  // at all.
+  const [logs, total] = await Promise.all([
+    prisma.auditLog.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: (page - 1) * take,
+      take,
+      select: {
+        id: true,
+        action: true,
+        details: true,
+        createdAt: true,
+        user: { select: { name: true, email: true } },
+      },
+    }),
+    prisma.auditLog.count({ where }),
+  ]);
+
+  return { logs, total, page, pageSize: take };
+}
+
+/**
+ * Distinct actions for the filter dropdown.
+ *
+ * The dropdown has to offer every action ever recorded, so it cannot be
+ * derived from the rows on the current page.
+ */
+export async function getAuditLogActions() {
+  await requireSuperAdmin();
+
+  const rows = await prisma.auditLog.findMany({
+    distinct: ["action"],
+    select: { action: true },
+    orderBy: { action: "asc" },
+  });
+
+  return rows.map((row) => row.action);
+}
+
+/** The name/email search and role filter the browser used to apply. */
+function userWhere(search?: string, role?: string) {
+  const where: any = {};
+
+  if (role === "Super Admin") {
+    where.isSuperAdmin = true;
+  } else if (role === "Staff") {
+    where.isStaff = true;
+    where.isSuperAdmin = false;
+  } else if (role === "User") {
+    where.isStaff = false;
+    where.isSuperAdmin = false;
+  }
+
+  const term = search?.trim();
+  if (term) {
+    where.OR = [
+      { name: { contains: term, mode: "insensitive" } },
+      { email: { contains: term, mode: "insensitive" } },
+    ];
+  }
+
+  return where;
+}
+
+export async function getUsers(options?: {
+  page?: number;
+  search?: string;
+  role?: string;
+  limit?: number;
+}) {
+  await requireSuperAdmin();
+
+  const take = clampPageSize(options?.limit);
+  const page = Math.max(Math.trunc(options?.page ?? 1), 1);
+  const where = userWhere(options?.search, options?.role);
+
+  const [users, total, superAdminCount] = await Promise.all([
+    prisma.user.findMany({
+      where,
+      // Superadmins, then staff, then everyone else; newest first within each
+      // group. Postgres sorts false before true, so "desc" puts the flag
+      // holders on top. id breaks any remaining tie so that a row cannot sit
+      // on two different pages across two queries.
+      orderBy: [
+        { isSuperAdmin: "desc" },
+        { isStaff: "desc" },
+        { createdAt: "desc" },
+        { id: "asc" },
+      ],
+      skip: (page - 1) * take,
+      take,
+      // Only the columns the table and the edit dialog actually read.
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        isStaff: true,
+        isSuperAdmin: true,
+        permissions: true,
+        createdAt: true,
+        _count: {
+          select: {
+            createdPetitions: true,
+            signedPetitions: true,
+          },
         },
       },
-    },
-  });
+    }),
+    prisma.user.count({ where }),
+    // Counted across every user rather than the page: the edit dialog uses
+    // this to refuse demoting the last superadmin, so a page-local count
+    // would let the guard be bypassed from page two onwards.
+    prisma.user.count({ where: { isSuperAdmin: true } }),
+  ]);
+
+  return { users, total, superAdminCount, page, pageSize: take };
 }
 
 /**
