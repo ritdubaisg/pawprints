@@ -22,51 +22,16 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { PERMISSIONS } from "@/lib/permissions";
 import {
+  PERMISSION_LABELS,
+  PERMISSION_PRESETS,
+} from "@/lib/permission-presets";
+import {
   updateUserPermissions,
   setStaffStatus,
   setSuperAdminStatus,
 } from "@/app/actions";
 import { toast } from "sonner";
 import { Loader2, ShieldAlert } from "lucide-react";
-
-/**
- * Named bundles for the common cases. Ticking nine boxes by hand is slow and
- * easy to get wrong; these cover the roles SG actually appoints.
- */
-const PRESETS = [
-  { label: "None", value: 0 },
-  {
-    label: "Reviewer (approve / reject / return)",
-    value: PERMISSIONS.APPROVE | PERMISSIONS.REJECT | PERMISSIONS.RETURN,
-  },
-  {
-    label: "Responder (updates + responses)",
-    value:
-      PERMISSIONS.ADD_UPDATE |
-      PERMISSIONS.RESPONSE |
-      PERMISSIONS.EDIT_UPDATE |
-      PERMISSIONS.EDIT_RESPONSE |
-      PERMISSIONS.MARK_IN_PROGRESS,
-  },
-  {
-    label: "Full staff (everything except superadmin)",
-    value: Object.values(PERMISSIONS).reduce((a, b) => a | b, 0),
-  },
-] as const;
-
-/** Human-readable labels for each bit. */
-const PERMISSION_LABELS: Record<keyof typeof PERMISSIONS, string> = {
-  ADD_UPDATE: "Post updates on petitions",
-  RESPONSE: "Post official responses",
-  MARK_IN_PROGRESS: "Mark petitions in progress",
-  UNPUBLISH: "Unpublish / remove petitions",
-  EDIT_UPDATE: "Edit existing updates",
-  EDIT_RESPONSE: "Edit existing responses",
-  APPROVE: "Approve petitions for publication",
-  REJECT: "Reject petitions",
-  RETURN: "Return petitions for changes",
-  MANAGE_TIERS: "Manage petition tiers",
-};
 
 interface EditUserDialogProps {
   user: any;
@@ -208,7 +173,7 @@ export default function EditUserDialog({
                 <Select
                   onValueChange={(v) => setPermissions(Number(v))}
                   value={
-                    PRESETS.find((p) => p.value === permissions)
+                    PERMISSION_PRESETS.find((p) => p.value === permissions)
                       ? String(permissions)
                       : undefined
                   }
@@ -217,7 +182,7 @@ export default function EditUserDialog({
                     <SelectValue placeholder="Apply a preset…" />
                   </SelectTrigger>
                   <SelectContent>
-                    {PRESETS.map((p) => (
+                    {PERMISSION_PRESETS.map((p) => (
                       <SelectItem key={p.label} value={String(p.value)}>
                         {p.label}
                       </SelectItem>

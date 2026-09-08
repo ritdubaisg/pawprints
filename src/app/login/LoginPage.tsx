@@ -10,6 +10,7 @@ import {
   signInWithEmailAndPassword,
   signInWithRedirect,
   getRedirectResult,
+  signOut,
 } from "firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,20 +22,48 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Loader2, AlertCircle, Mail, ArrowLeft } from "lucide-react";
+import { Loader2, AlertCircle, Mail, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
+import { requestPasswordReset } from "@/app/account-actions";
+import { ALLOWED_EMAIL_DESCRIPTION } from "@/lib/email-domain";
+import type { LoginResult } from "./login";
 
 interface LoginPageProps {
-  loginAction: (idToken: string) => Promise<void>;
+  loginAction: (idToken: string) => Promise<LoginResult | void>;
 }
+
+type View = "options" | "email" | "forgot";
 
 export default function LoginPage({ loginAction }: LoginPageProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showEmailLogin, setShowEmailLogin] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [view, setView] = useState<View>("options");
+
+  /**
+   * `loginAction` rejects anyone outside RIT after Firebase has already
+   * signed them in. Clearing the client session keeps the two in step, so a
+   * rejected account cannot linger and be retried silently.
+   */
+  const handleLoginResult = async (result: LoginResult | void) => {
+    if (result?.error) {
+      await signOut(getFirebaseAuth()).catch(() => {});
+      setError(result.error);
+      setIsLoading(false);
+      return true;
+    }
+    return false;
+  };
+
+  const goTo = (next: View) => {
+    setError(null);
+    setNotice(null);
+    setView(next);
+  };
 
   useEffect(() => {
     const auth = getFirebaseAuth();
@@ -44,7 +73,7 @@ export default function LoginPage({ loginAction }: LoginPageProps) {
           setIsLoading(true);
           const user = result.user;
           const idToken = await user?.getIdToken();
-          await loginAction(idToken!);
+          await handleLoginResult(await loginAction(idToken!));
         }
       })
       .catch((error) => {
@@ -54,6 +83,7 @@ export default function LoginPage({ loginAction }: LoginPageProps) {
         console.error("Redirect login error:", error);
         setError(error.message || "An error occurred during login");
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loginAction]);
 
   async function handleEmailLogin(event: React.FormEvent) {
@@ -78,13 +108,37 @@ export default function LoginPage({ loginAction }: LoginPageProps) {
       const result = await signInWithEmailAndPassword(auth, email, password);
       const user = result.user;
       const idToken = await user.getIdToken();
-      await loginAction(idToken);
+      if (await handleLoginResult(await loginAction(idToken))) return;
     } catch (error: any) {
       if (error?.message === "NEXT_REDIRECT") {
         return;
       }
       console.error("Login error:", error);
-      setError("Invalid email or password");
+      setError(
+        error?.code === "auth/user-disabled"
+          ? "This account has been disabled. Contact Student Government."
+          : "Invalid email or password",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleForgotPassword(event: React.FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setNotice(null);
+    setIsLoading(true);
+
+    try {
+      const result = await requestPasswordReset(resetEmail);
+      if (result.ok) {
+        setNotice(result.message);
+      } else {
+        setError(result.message);
+      }
+    } catch {
+      setError("Could not send a reset link. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -122,11 +176,8 @@ export default function LoginPage({ loginAction }: LoginPageProps) {
         return;
       }
 
-      await loginAction(idToken);
+      if (await handleLoginResult(await loginAction(idToken))) return;
     } catch (error: any) {
-      console.log(error.message);
-      console.log(typeof error);
-
       if (error?.message === "NEXT_REDIRECT") {
         // Ignore, this is expected for Next.js redirects
         return;
@@ -178,7 +229,14 @@ export default function LoginPage({ loginAction }: LoginPageProps) {
             </Alert>
           )}
 
-          {!showEmailLogin ? (
+          {notice && (
+            <Alert>
+              <CheckCircle2 className="h-4 w-4" />
+              <AlertDescription>{notice}</AlertDescription>
+            </Alert>
+          )}
+
+          {view === "options" && (
             <div className="space-y-4">
               <div className="space-y-4">
                 <Label className="text-left w-full text-xs text-muted-foreground">
@@ -217,25 +275,30 @@ export default function LoginPage({ loginAction }: LoginPageProps) {
                 </Button>
               </div>
               <div>
-                <Label className="text-center w-full text-xs text-muted-foreground"></Label>
                 <Button
                   variant="outline"
                   className="w-full h-12 text-base font-medium relative"
-                  onClick={() => setShowEmailLogin(true)}
+                  onClick={() => goTo("email")}
                   disabled={isLoading}
                 >
                   <Mail className="mr-2 h-4 w-4" />
                   Login with Email
                 </Button>
               </div>
+              <p className="text-xs text-muted-foreground text-center">
+                Only {ALLOWED_EMAIL_DESCRIPTION} accounts can use PawPrints.
+              </p>
             </div>
-          ) : (
+          )}
+
+          {view === "email" && (
             <form onSubmit={handleEmailLogin} className="space-y-4">
               <div className="flex mb-2">
                 <Button
+                  type="button"
                   variant="link"
                   className="!p-0 mb-4 h-auto hover:bg-transparent text-muted-foreground hover:text-foreground"
-                  onClick={() => setShowEmailLogin(false)}
+                  onClick={() => goTo("options")}
                 >
                   <ArrowLeft />
                   Back to sign in options
@@ -246,10 +309,11 @@ export default function LoginPage({ loginAction }: LoginPageProps) {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="name@example.com"
+                  placeholder="name@rit.edu"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={isLoading}
+                  autoComplete="username"
                 />
               </div>
               <div className="space-y-2">
@@ -261,11 +325,59 @@ export default function LoginPage({ loginAction }: LoginPageProps) {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isLoading}
+                  autoComplete="current-password"
                 />
               </div>
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Sign In
+              </Button>
+              <Button
+                type="button"
+                variant="link"
+                className="w-full h-auto p-0 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  setResetEmail(email);
+                  goTo("forgot");
+                }}
+              >
+                Forgot your password?
+              </Button>
+            </form>
+          )}
+
+          {view === "forgot" && (
+            <form onSubmit={handleForgotPassword} className="space-y-4">
+              <div className="flex mb-2">
+                <Button
+                  type="button"
+                  variant="link"
+                  className="!p-0 mb-4 h-auto hover:bg-transparent text-muted-foreground hover:text-foreground"
+                  onClick={() => goTo("email")}
+                >
+                  <ArrowLeft />
+                  Back to sign in
+                </Button>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="reset-email">Email</Label>
+                <Input
+                  id="reset-email"
+                  type="email"
+                  placeholder="name@rit.edu"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  disabled={isLoading}
+                  autoComplete="username"
+                />
+                <p className="text-xs text-muted-foreground">
+                  We&apos;ll email a link to set a new password. Google accounts
+                  are managed by RIT and cannot be reset here.
+                </p>
+              </div>
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Send reset link
               </Button>
             </form>
           )}

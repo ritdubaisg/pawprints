@@ -9,7 +9,7 @@ import { TokenSet } from "next-firebase-auth-edge/auth";
 import { authConfig, serverConfig } from "./app/config/server-config";
 
 const PUBLIC_PATHS = ["/login"];
-const PRIVATE_PATHS = ["/profile", "/create", "/review"];
+const PRIVATE_PATHS = ["/profile", "/create", "/review", "/onboarding"];
 
 export async function middleware(request: NextRequest) {
   return authMiddleware(request, {
@@ -23,10 +23,14 @@ export async function middleware(request: NextRequest) {
     serviceAccount: serverConfig.serviceAccount,
     handleValidToken: async ({ token, decodedToken }, headers) => {
       // Authenticated user should not be able to access /login, /register and /reset-password routes
-      console.log(request.nextUrl.pathname);
       if (PUBLIC_PATHS.includes(request.nextUrl.pathname)) {
         return redirectToHome(request);
       }
+
+      // The root layout gates accounts still on a temporary password, and a
+      // layout cannot see the current route. Middleware runs on the edge and
+      // cannot reach Prisma, so it forwards the path instead.
+      headers.set("x-pathname", request.nextUrl.pathname);
 
       return NextResponse.next({
         request: {

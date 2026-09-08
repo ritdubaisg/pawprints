@@ -16,6 +16,7 @@ import { PetitionGrid } from "@/components";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Loader2, UserIcon, CalendarIcon } from "lucide-react";
 import { NotificationSettings } from "@/components/Notifications/NotificationSettings";
+import { AccountSecurityCard } from "@/components/Account/AccountSecurityCard";
 
 interface UserProfile {
   user: {
@@ -164,8 +165,9 @@ function ProfileContent() {
               )}
             </TabsContent>
 
-            <TabsContent value="settings" className="mt-0">
+            <TabsContent value="settings" className="mt-0 space-y-6">
               <NotificationSettings />
+              <AccountSecurityCard />
             </TabsContent>
           </Tabs>
         </div>

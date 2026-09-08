@@ -20,6 +20,18 @@ model User {
   isSuperAdmin Boolean @default(false)
   permissions  Int     @default(0)
 
+  // How the account signs in. Google accounts (@g.rit.edu) self-provision on
+  // first login; "password" accounts are issued by a superadmin for faculty
+  // and staff, who have no Google identity.
+  authProvider       String    @default("google") // "google" | "password"
+  // Set when a superadmin issues or regenerates a password. The holder is
+  // forced through /onboarding until they choose their own.
+  mustChangePassword Boolean   @default(false)
+  passwordUpdatedAt  DateTime?
+  // Suspends sign-in without deleting the account (petitions reference users).
+  disabled           Boolean   @default(false)
+  issuedById         String?
+
   createdPetitions Petition[] @relation("CreatedPetitions")
   signedPetitions  Petition[] @relation("SignedPetitions")
   subscriptions    Petition[] @relation("SubscribedPetitions")

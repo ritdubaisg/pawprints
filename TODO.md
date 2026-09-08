@@ -48,6 +48,8 @@
 - [ ] Get rid of /explore and use /petitions instead
 - [ ] Use sign in and sign up terminology consistently, including routes
 - [ ] Ensure RIT orange (#F76902) consistently applied
+- [ ] Migrate from Safe Browsing API v4 to v5
+- [ ] Better UI feedback for auth states
 
 ---
 

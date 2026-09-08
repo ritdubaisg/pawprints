@@ -3,13 +3,6 @@
 import React, { useState, useMemo } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
   Table,
   TableBody,
   TableCell,
@@ -18,7 +11,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -35,21 +27,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import moment from "moment";
-import { PERMISSIONS } from "@/lib/permissions";
+import { getPermissionNames } from "@/lib/permission-presets";
 import { Search, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import EditUserDialog from "./EditUserDialog";
-
-const getPermissionNames = (permInt: number) => {
-  if (!permInt) return [];
-  const names: string[] = [];
-  for (const [key, value] of Object.entries(PERMISSIONS)) {
-    if (typeof value === "number" && (permInt & value) === value) {
-      names.push(key);
-    }
-  }
-  return names;
-};
+import AccountsTable from "./AccountsTable";
+import {
+  AdminTableShell,
+  AdminToolbar,
+  AdminTableFooter,
+  STICKY_HEADER,
+} from "./AdminTableShell";
 
 const DETAIL_LABELS: Record<string, string> = {
   petitionId: "Petition",
@@ -69,11 +57,16 @@ const DETAIL_LABELS: Record<string, string> = {
   response: "Response notifications",
   reported: "Report notifications",
   threshold: "Threshold notifications",
+  isStaff: "Staff",
+  permissions: "Permissions",
+  delivery: "Password delivery",
+  emailSent: "Reset email sent",
 };
 
 const PERMISSION_KEYS = new Set([
   "before",
   "after",
+  "permissions",
   "permissionsBefore",
   "permissionsAfter",
 ]);
@@ -194,242 +187,256 @@ export default function AdminDashboard({
     });
   }, [users, userSearch, userRoleFilter]);
 
+  const issuedAccountCount = useMemo(
+    () => users.filter((user) => user.authProvider === "password").length,
+    [users],
+  );
+
   return (
-    <div className="container mx-auto py-10 px-4">
-      <h1 className="text-3xl font-bold mb-8">Admin Dashboard</h1>
+    <AdminTableShell>
+      <Tabs defaultValue="logs" className="flex min-h-0 flex-1 flex-col gap-0">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-3 py-3 sm:px-4">
+          <h1 className="text-xl font-bold sm:text-2xl">Admin</h1>
+          {/* Scrolls rather than wraps: three tabs plus counts overflow a
+              360px viewport, and a wrapped row would push the table down. */}
+          <div className="-mx-3 max-w-full overflow-x-auto px-3 sm:mx-0 sm:px-0">
+            <TabsList>
+              <TabsTrigger value="logs">Audit Logs</TabsTrigger>
+              <TabsTrigger value="users">
+                Users
+                <span className="text-xs text-muted-foreground">
+                  {users.length}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="accounts">
+                Accounts
+                <span className="text-xs text-muted-foreground">
+                  {issuedAccountCount}
+                </span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
+        </div>
 
-      <Tabs defaultValue="logs">
-        <TabsList className="mb-4">
-          <TabsTrigger value="logs">Audit Logs</TabsTrigger>
-          <TabsTrigger value="users">Users</TabsTrigger>
-        </TabsList>
+        <TabsContent
+          value="logs"
+          className="flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden"
+        >
+          <AdminToolbar>
+            <div className="relative min-w-0 flex-1">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search logs..."
+                value={logSearch}
+                onChange={(e) => setLogSearch(e.target.value)}
+                className="pl-8"
+              />
+            </div>
+            <Select value={logActionFilter} onValueChange={setLogActionFilter}>
+              <SelectTrigger className="w-full sm:w-[220px]">
+                <SelectValue placeholder="Filter by action" />
+              </SelectTrigger>
+              <SelectContent>
+                {uniqueActions.map((action) => (
+                  <SelectItem key={action} value={action}>
+                    {action}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </AdminToolbar>
 
-        <TabsContent value="logs">
-          <Card>
-            <CardHeader>
-              <CardTitle>System Audit Logs</CardTitle>
-              <CardDescription>
-                View all system actions and events.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col sm:flex-row gap-4 mb-6">
-                <div className="relative flex-1">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search logs (action, user, details)..."
-                    value={logSearch}
-                    onChange={(e) => setLogSearch(e.target.value)}
-                    className="pl-8"
-                  />
-                </div>
-                <Select
-                  value={logActionFilter}
-                  onValueChange={setLogActionFilter}
-                >
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Filter by Action" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {uniqueActions.map((action) => (
-                      <SelectItem key={action} value={action}>
-                        {action}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <ScrollArea className="h-[600px] border rounded-md">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Action</TableHead>
-                      <TableHead>User</TableHead>
-                      <TableHead>Details</TableHead>
-                      <TableHead>Date</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredLogs.length === 0 ? (
-                      <TableRow>
-                        <TableCell
-                          colSpan={4}
-                          className="h-24 text-center text-muted-foreground"
+          <Table containerClassName="min-h-0 flex-1">
+            <TableHeader className={STICKY_HEADER}>
+              <TableRow>
+                <TableHead>Action</TableHead>
+                <TableHead>User</TableHead>
+                <TableHead>Details</TableHead>
+                <TableHead>Date</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredLogs.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={4}
+                    className="h-24 text-center text-muted-foreground"
+                  >
+                    No logs found matching your criteria.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredLogs.map((log) => (
+                  <TableRow key={log.id}>
+                    <TableCell className="py-2">
+                      <Badge variant="outline">{log.action}</Badge>
+                    </TableCell>
+                    <TableCell className="py-2">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">
+                          {log.user?.name || "Unknown"}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {log.user?.email}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="max-w-[320px] py-2">
+                      {log.details ? (
+                        <button
+                          type="button"
+                          onClick={() => setViewingLog(log)}
+                          className="block w-full truncate text-left text-xs hover:text-primary hover:underline"
+                          title="Click to view full details"
                         >
-                          No logs found matching your criteria.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      filteredLogs.map((log) => (
-                        <TableRow key={log.id}>
-                          <TableCell className="py-2">
-                            <Badge variant="outline">{log.action}</Badge>
-                          </TableCell>
-                          <TableCell className="py-2">
-                            <div className="flex flex-col">
-                              <span className="font-medium text-sm">
-                                {log.user?.name || "Unknown"}
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                {log.user?.email}
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="max-w-[300px] py-2">
-                            {log.details ? (
-                              <button
-                                type="button"
-                                onClick={() => setViewingLog(log)}
-                                className="block w-full truncate text-left text-xs hover:text-primary hover:underline"
-                                title="Click to view full details"
-                              >
-                                {summariseDetails(log.details)}
-                              </button>
-                            ) : null}
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap text-xs text-muted-foreground py-2">
-                            {moment(log.createdAt).format("MMM D, YYYY h:mm A")}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
-              <div className="mt-4 text-xs text-muted-foreground text-right">
-                Showing {filteredLogs.length} of {logs.length} logs
-              </div>
-            </CardContent>
-          </Card>
+                          {summariseDetails(log.details)}
+                        </button>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="py-2 text-xs text-muted-foreground">
+                      {moment(log.createdAt).format("MMM D, YYYY h:mm A")}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+
+          <AdminTableFooter>
+            Showing {filteredLogs.length} of {logs.length} logs
+          </AdminTableFooter>
         </TabsContent>
 
-        <TabsContent value="users">
-          <Card>
-            <CardHeader>
-              <CardTitle>Users</CardTitle>
-              <CardDescription>Manage system users.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col sm:flex-row gap-4 mb-6">
-                <div className="relative flex-1">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search users (name, email)..."
-                    value={userSearch}
-                    onChange={(e) => setUserSearch(e.target.value)}
-                    className="pl-8"
-                  />
-                </div>
-                <Select
-                  value={userRoleFilter}
-                  onValueChange={setUserRoleFilter}
-                >
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Filter by Role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="All">All Roles</SelectItem>
-                    <SelectItem value="Super Admin">Super Admin</SelectItem>
-                    <SelectItem value="Staff">Staff</SelectItem>
-                    <SelectItem value="User">User</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+        <TabsContent
+          value="users"
+          className="flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden"
+        >
+          <AdminToolbar>
+            <div className="relative min-w-0 flex-1">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search users..."
+                value={userSearch}
+                onChange={(e) => setUserSearch(e.target.value)}
+                className="pl-8"
+              />
+            </div>
+            <Select value={userRoleFilter} onValueChange={setUserRoleFilter}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectValue placeholder="Filter by role" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Roles</SelectItem>
+                <SelectItem value="Super Admin">Super Admin</SelectItem>
+                <SelectItem value="Staff">Staff</SelectItem>
+                <SelectItem value="User">User</SelectItem>
+              </SelectContent>
+            </Select>
+          </AdminToolbar>
 
-              <ScrollArea className="h-[600px] border rounded-md">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>Permissions</TableHead>
-                      <TableHead>Petitions</TableHead>
-                      <TableHead>Signed</TableHead>
-                      <TableHead>Joined</TableHead>
-                      <TableHead className="w-[80px]">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredUsers.length === 0 ? (
-                      <TableRow>
-                        <TableCell
-                          colSpan={8}
-                          className="h-24 text-center text-muted-foreground"
-                        >
-                          No users found matching your criteria.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      filteredUsers.map((user) => (
-                        <TableRow key={user.id}>
-                          <TableCell className="font-medium py-2">
-                            {user.name || "No Name"}
-                          </TableCell>
-                          <TableCell className="py-2">{user.email}</TableCell>
-                          <TableCell className="py-2">
-                            {user.isSuperAdmin ? (
-                              <Badge variant="destructive">Super Admin</Badge>
-                            ) : user.isStaff ? (
-                              <Badge variant="default">Staff</Badge>
-                            ) : (
-                              <Badge variant="secondary">User</Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="py-2">
-                            <div className="flex flex-col gap-1">
-                              <span className="font-mono text-xs text-muted-foreground">
-                                {user.permissions || 0}
-                              </span>
-                              {getPermissionNames(user.permissions || 0)
-                                .length > 0 && (
-                                <div className="flex flex-wrap gap-1 max-w-[200px]">
-                                  {getPermissionNames(
-                                    user.permissions || 0,
-                                  ).map((p) => (
-                                    <Badge
-                                      key={p}
-                                      variant="outline"
-                                      className="text-[10px] h-4 px-1"
-                                    >
-                                      {p}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="py-2">
-                            {user._count?.createdPetitions || 0}
-                          </TableCell>
-                          <TableCell className="py-2">
-                            {user._count?.signedPetitions || 0}
-                          </TableCell>
-                          <TableCell className="text-xs text-muted-foreground py-2">
-                            {moment(user.createdAt).format("MMM D, YYYY")}
-                          </TableCell>
-                          <TableCell className="py-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setEditingUser(user)}
-                              aria-label={`Edit access for ${user.name || user.email}`}
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
-              <div className="mt-4 text-xs text-muted-foreground text-right">
-                Showing {filteredUsers.length} of {users.length} users
-              </div>
-            </CardContent>
-          </Card>
+          <Table containerClassName="min-h-0 flex-1">
+            <TableHeader className={STICKY_HEADER}>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Sign-in</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Permissions</TableHead>
+                <TableHead>Petitions</TableHead>
+                <TableHead>Signed</TableHead>
+                <TableHead>Joined</TableHead>
+                <TableHead className="w-[70px] text-right">Edit</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredUsers.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={9}
+                    className="h-24 text-center text-muted-foreground"
+                  >
+                    No users found matching your criteria.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredUsers.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="py-2 font-medium">
+                      {user.name || "No Name"}
+                    </TableCell>
+                    <TableCell className="py-2">{user.email}</TableCell>
+                    <TableCell className="py-2">
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant="outline">
+                          {user.authProvider === "password"
+                            ? "Password"
+                            : "Google"}
+                        </Badge>
+                        {user.disabled && (
+                          <Badge variant="destructive">Disabled</Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-2">
+                      {user.isSuperAdmin ? (
+                        <Badge variant="destructive">Super Admin</Badge>
+                      ) : user.isStaff ? (
+                        <Badge variant="default">Staff</Badge>
+                      ) : (
+                        <Badge variant="secondary">User</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="py-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {user.permissions || 0}
+                        </span>
+                        {getPermissionNames(user.permissions || 0).map((p) => (
+                          <Badge
+                            key={p}
+                            variant="outline"
+                            className="h-4 px-1 text-[10px]"
+                          >
+                            {p}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-2">
+                      {user._count?.createdPetitions || 0}
+                    </TableCell>
+                    <TableCell className="py-2">
+                      {user._count?.signedPetitions || 0}
+                    </TableCell>
+                    <TableCell className="py-2 text-xs text-muted-foreground">
+                      {moment(user.createdAt).format("MMM D, YYYY")}
+                    </TableCell>
+                    <TableCell className="py-2 text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEditingUser(user)}
+                        aria-label={`Edit access for ${user.name || user.email}`}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+
+          <AdminTableFooter>
+            Showing {filteredUsers.length} of {users.length} users
+          </AdminTableFooter>
+        </TabsContent>
+
+        <TabsContent
+          value="accounts"
+          className="flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden"
+        >
+          <AccountsTable users={users} currentUserId={currentUserId} />
         </TabsContent>
       </Tabs>
 
@@ -445,7 +452,7 @@ export default function AdminDashboard({
       )}
       {viewingLog && (
         <Dialog open onOpenChange={() => setViewingLog(null)}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle>{viewingLog.action}</DialogTitle>
               <DialogDescription>
@@ -460,7 +467,7 @@ export default function AdminDashboard({
 
               if (!pairs) {
                 return (
-                  <pre className="max-h-[60vh] overflow-auto rounded bg-muted p-3 text-xs whitespace-pre-wrap break-all">
+                  <pre className="max-h-[60vh] overflow-auto rounded bg-muted p-3 text-xs break-all whitespace-pre-wrap">
                     {viewingLog.details || "No details recorded."}
                   </pre>
                 );
@@ -471,9 +478,9 @@ export default function AdminDashboard({
                   {pairs.map((pair) => (
                     <div
                       key={pair.label}
-                      className="flex gap-4 py-1.5 border-b border-border/40 last:border-0"
+                      className="flex flex-col gap-1 border-b border-border/40 py-1.5 last:border-0 sm:flex-row sm:gap-4"
                     >
-                      <dt className="w-44 shrink-0 text-muted-foreground">
+                      <dt className="shrink-0 text-muted-foreground sm:w-44">
                         {pair.label}
                       </dt>
                       <dd className="flex-1 break-words">{pair.value}</dd>
@@ -485,6 +492,6 @@ export default function AdminDashboard({
           </DialogContent>
         </Dialog>
       )}
-    </div>
+    </AdminTableShell>
   );
 }

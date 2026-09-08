@@ -4,7 +4,8 @@ import { Header, Footer } from "@/components";
 import "./globals.css";
 
 import { getTokens } from "next-firebase-auth-edge";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { AuthProvider } from "@/app/auth/AuthProvider";
 import { authConfig } from "./config/server-config";
 import { toUser } from "./shared/user";
@@ -35,11 +36,31 @@ export default async function RootLayout({
   if (user) {
     const dbUser = await prisma.user.findUnique({
       where: { id: user.uid },
-      select: { isStaff: true, isSuperAdmin: true },
+      select: {
+        isStaff: true,
+        isSuperAdmin: true,
+        mustChangePassword: true,
+        authProvider: true,
+      },
     });
     if (dbUser) {
       hasAdminAccess = dbUser.isStaff || dbUser.isSuperAdmin;
       isSuperAdmin = dbUser.isSuperAdmin;
+
+      // Accounts still on a superadmin-issued password get no further than
+      // /onboarding. Doing this here rather than in middleware is what lets
+      // the check consult the database; the path comes from the header the
+      // middleware sets.
+      if (dbUser.authProvider === "password" && dbUser.mustChangePassword) {
+        const pathname = (await headers()).get("x-pathname") ?? "";
+        const exempt =
+          pathname.startsWith("/onboarding") ||
+          pathname.startsWith("/login") ||
+          pathname.startsWith("/logout");
+        if (!exempt) {
+          redirect("/onboarding");
+        }
+      }
     }
   }
 
