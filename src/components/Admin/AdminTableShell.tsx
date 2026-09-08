@@ -37,7 +37,7 @@ export function AdminToolbar({
   return (
     <div
       className={cn(
-        "flex shrink-0 flex-col gap-2 border-b px-3 py-2 sm:flex-row sm:items-center sm:px-4",
+        "flex shrink-0 flex-col gap-2 border-b px-3 py-2 sm:flex-row sm:items-center sm:px-4 lg:px-8",
         className,
       )}
     >
@@ -49,11 +49,22 @@ export function AdminToolbar({
 /** Row count, pinned below the rows so it is readable without scrolling. */
 export function AdminTableFooter({ children }: { children: React.ReactNode }) {
   return (
-    <div className="shrink-0 border-t bg-muted/30 px-3 py-1.5 text-right text-xs text-muted-foreground sm:px-4">
+    <div className="shrink-0 border-t bg-muted/30 px-3 py-1.5 text-right text-xs text-muted-foreground sm:px-4 lg:px-8">
       {children}
     </div>
   );
 }
+
+/**
+ * Gutters on the outer columns, matching the toolbar's padding from `lg` up.
+ *
+ * Applied to the cells rather than the scroll container: padding on an
+ * `overflow-auto` element is unreliable on the trailing edge once the content
+ * scrolls, and it would also inset the row hover fill away from the edge.
+ * Narrow screens keep the full-bleed rows, where the width is worth more.
+ */
+export const TABLE_EDGE_PADDING =
+  "lg:[&_tr>*:first-child]:pl-8 lg:[&_tr>*:last-child]:pr-8";
 
 /**
  * Sticky column headers.

@@ -37,6 +37,7 @@ import {
   AdminToolbar,
   AdminTableFooter,
   STICKY_HEADER,
+  TABLE_EDGE_PADDING,
 } from "./AdminTableShell";
 
 const DETAIL_LABELS: Record<string, string> = {
@@ -195,7 +196,7 @@ export default function AdminDashboard({
   return (
     <AdminTableShell>
       <Tabs defaultValue="logs" className="flex min-h-0 flex-1 flex-col gap-0">
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-3 py-3 sm:px-4">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-3 py-3 sm:px-4 lg:px-8">
           <h1 className="text-xl font-bold sm:text-2xl">Admin</h1>
           {/* Scrolls rather than wraps: three tabs plus counts overflow a
               360px viewport, and a wrapped row would push the table down. */}
@@ -246,7 +247,7 @@ export default function AdminDashboard({
             </Select>
           </AdminToolbar>
 
-          <Table containerClassName="min-h-0 flex-1">
+          <Table containerClassName="min-h-0 flex-1" className={TABLE_EDGE_PADDING}>
             <TableHeader className={STICKY_HEADER}>
               <TableRow>
                 <TableHead>Action</TableHead>
@@ -334,7 +335,7 @@ export default function AdminDashboard({
             </Select>
           </AdminToolbar>
 
-          <Table containerClassName="min-h-0 flex-1">
+          <Table containerClassName="min-h-0 flex-1" className={TABLE_EDGE_PADDING}>
             <TableHeader className={STICKY_HEADER}>
               <TableRow>
                 <TableHead>Name</TableHead>

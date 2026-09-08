@@ -56,6 +56,7 @@ import {
   AdminToolbar,
   AdminTableFooter,
   STICKY_HEADER,
+  TABLE_EDGE_PADDING,
 } from "./AdminTableShell";
 
 interface AccountsTableProps {
@@ -215,7 +216,7 @@ export default function AccountsTable({
         </Button>
       </AdminToolbar>
 
-      <Table containerClassName="min-h-0 flex-1">
+      <Table containerClassName="min-h-0 flex-1" className={TABLE_EDGE_PADDING}>
         <TableHeader className={STICKY_HEADER}>
           <TableRow>
             <TableHead>Name</TableHead>
