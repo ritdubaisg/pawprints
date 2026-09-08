@@ -25,6 +25,44 @@ export enum PetitionStatus {
   Returned = 4,
 }
 
+export type ReviewDecision = "APPROVE" | "CHANGES_REQUESTED";
+
+/** The minimum a reviewer needs to be rendered in a timeline or a chip. */
+export interface ReviewerRef {
+  id: string;
+  name: string;
+  email?: string | null;
+}
+
+export interface PetitionReviewEntry {
+  id: number;
+  stage: number;
+  decision: ReviewDecision;
+  comment: string | null;
+  created_at: string;
+  reviewer: ReviewerRef;
+}
+
+export interface PetitionAssignmentEntry {
+  id: number;
+  stage: number;
+  created_at: string;
+  assignee: ReviewerRef;
+  assignedBy: ReviewerRef | null;
+}
+
+export type ReviewEventType = "ASSIGNED" | "UNASSIGNED";
+
+/** Assignment history. Append-only, so removals survive in the timeline. */
+export interface PetitionReviewEventEntry {
+  id: number;
+  type: ReviewEventType;
+  stage: number;
+  created_at: string;
+  actor: ReviewerRef | null;
+  subject: ReviewerRef;
+}
+
 export interface Petition {
   id: number;
   title: string;
@@ -45,4 +83,10 @@ export interface Petition {
   in_progress: boolean | null;
   updates: Update[];
   old_id: string | null;
+
+  // Only loaded on the review screens; list views leave these undefined.
+  review_stage?: number;
+  reviews?: PetitionReviewEntry[];
+  assignments?: PetitionAssignmentEntry[];
+  review_events?: PetitionReviewEventEntry[];
 }

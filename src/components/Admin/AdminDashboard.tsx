@@ -32,6 +32,11 @@ import { Search, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import EditUserDialog from "./EditUserDialog";
 import AccountsTable from "./AccountsTable";
+import ReviewPoolsPanel from "./ReviewPoolsPanel";
+import type {
+  ReviewCandidate,
+  ReviewPool,
+} from "@/app/review-actions";
 import {
   AdminTableShell,
   AdminToolbar,
@@ -127,6 +132,8 @@ interface AdminDashboardProps {
   users: any[];
   currentUserId: string | null;
   superAdminCount: number;
+  pools: ReviewPool[];
+  poolCandidates: ReviewCandidate[];
 }
 
 export default function AdminDashboard({
@@ -134,6 +141,8 @@ export default function AdminDashboard({
   users,
   currentUserId,
   superAdminCount,
+  pools,
+  poolCandidates,
 }: AdminDashboardProps) {
   // Logs State
   const [logSearch, setLogSearch] = useState("");
@@ -215,6 +224,7 @@ export default function AdminDashboard({
                   {issuedAccountCount}
                 </span>
               </TabsTrigger>
+              <TabsTrigger value="reviewers">Reviewers</TabsTrigger>
             </TabsList>
           </div>
         </div>
@@ -438,6 +448,13 @@ export default function AdminDashboard({
           className="flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden"
         >
           <AccountsTable users={users} currentUserId={currentUserId} />
+        </TabsContent>
+
+        <TabsContent
+          value="reviewers"
+          className="flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden"
+        >
+          <ReviewPoolsPanel pools={pools} candidates={poolCandidates} />
         </TabsContent>
       </Tabs>
 

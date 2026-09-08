@@ -7,7 +7,9 @@ import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Petition, PetitionStatus } from "../../types/petition";
+import Link from "next/link";
 import { Badge } from "../ui/badge";
+import { PetitionStatusChip } from "@/lib/petition-status";
 import { Button } from "../ui/button";
 import { ButtonGroup } from "../ui/button-group";
 import { Separator } from "../ui/separator";
@@ -34,7 +36,6 @@ import {
   addResponse,
   editUpdate,
   editResponse,
-  approvePetition,
   rejectPetition,
   returnPetition,
   getStaffPermissions,
@@ -101,47 +102,6 @@ interface PetitionPageClientProps {
   onApprove?: (petition: Petition) => void;
   onReject?: (petition: Petition) => void;
 }
-
-const getStatusInfo = (status: PetitionStatus) => {
-  switch (status) {
-    case PetitionStatus.New:
-      return {
-        text: "New",
-        color: "text-orange-600",
-        badge: "bg-orange-100 text-orange-800",
-      };
-    case PetitionStatus.Published:
-      return {
-        text: "Published",
-        color: "text-green-600",
-        badge: "bg-green-100 text-green-800",
-      };
-    case PetitionStatus.Removed:
-      return {
-        text: "Removed",
-        color: "text-red-600",
-        badge: "bg-red-100 text-red-800",
-      };
-    case PetitionStatus.Returned:
-      return {
-        text: "Returned for Changes",
-        color: "text-red-600",
-        badge: "bg-red-100 text-red-800",
-      };
-    case PetitionStatus.NeedsReview:
-      return {
-        text: "Needs Review",
-        color: "text-yellow-600",
-        badge: "bg-yellow-100 text-yellow-800",
-      };
-    default:
-      return {
-        text: "Unknown",
-        color: "text-gray-600",
-        badge: "bg-gray-100 text-gray-800",
-      };
-  }
-};
 
 const PetitionPageClient: React.FC<PetitionPageClientProps> = ({
   initialPetition: initialPetitionProp,
@@ -388,21 +348,6 @@ const PetitionPageClient: React.FC<PetitionPageClientProps> = ({
     }
   };
 
-  const handleApprove = async () => {
-    if (!petition) return;
-    setIsLoadingSign(true);
-    try {
-      await approvePetition(petition.id);
-      toast.success("Petition approved and published");
-      setPetition({ ...petition, status: PetitionStatus.Published });
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to approve petition");
-    } finally {
-      setIsLoadingSign(false);
-    }
-  };
-
   const handleReturn = async () => {
     if (!petition) return;
     setIsLoadingSign(true);
@@ -458,7 +403,6 @@ const PetitionPageClient: React.FC<PetitionPageClientProps> = ({
     (petition.signatures / TARGET_SIGNATURES) * 100,
     100,
   );
-  const statusInfo = getStatusInfo(petition.status);
 
   const getProgressBarColor = () => {
     if (petition.signatures >= TARGET_SIGNATURES) {
@@ -802,12 +746,7 @@ const PetitionPageClient: React.FC<PetitionPageClientProps> = ({
               </Button>
             </div>
           </div>
-          <Badge
-            variant="outline"
-            className={`${statusInfo.badge} text-base px-3 py-1`}
-          >
-            {statusInfo.text}
-          </Badge>
+          <PetitionStatusChip status={petition.status} />
         </div>
 
         {petition.tier > 0 && (
@@ -953,18 +892,14 @@ const PetitionPageClient: React.FC<PetitionPageClientProps> = ({
             <div className="space-y-2">
               <ButtonGroup className="">
                 {checkPerm(PERMISSIONS.APPROVE) && (
-                  <Button
-                    onClick={handleApprove}
-                    className=""
-                    disabled={isLoadingSign}
-                    variant="outline"
-                  >
-                    {isLoadingSign ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
+                  // Publication is decided by the staged review, not by one
+                  // button here, so this sends reviewers to the page that can
+                  // actually record their approval.
+                  <Button asChild variant="outline">
+                    <Link href={`/review/${petition.id}`}>
                       <CheckCircle2Icon className="mr-2 h-4 w-4" />
-                    )}
-                    Approve & Publish
+                      Open review
+                    </Link>
                   </Button>
                 )}
 

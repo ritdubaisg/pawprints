@@ -6,6 +6,7 @@ import {
   getStaffPermissions,
   getCurrentUserId,
 } from "@/app/actions";
+import { getPoolCandidates, getReviewPools } from "@/app/review-actions";
 import { redirect } from "next/navigation";
 
 export default async function AdminPage() {
@@ -39,6 +40,17 @@ export default async function AdminPage() {
   const currentUserId = await getCurrentUserId();
   const superAdminCount = users.filter((u: any) => u.isSuperAdmin).length;
 
+  const [pools, poolCandidates] = await Promise.all([
+    getReviewPools().catch((e) => {
+      console.error("Failed to fetch review pools:", e);
+      return [];
+    }),
+    getPoolCandidates().catch((e) => {
+      console.error("Failed to fetch pool candidates:", e);
+      return [];
+    }),
+  ]);
+
   return (
     <AdminGuard>
       <AdminDashboard
@@ -46,6 +58,8 @@ export default async function AdminPage() {
         users={users}
         currentUserId={currentUserId}
         superAdminCount={superAdminCount}
+        pools={pools}
+        poolCandidates={poolCandidates}
       />
     </AdminGuard>
   );

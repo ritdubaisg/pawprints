@@ -10,6 +10,7 @@ export const PERMISSIONS = {
   REJECT: 128, // 2^7
   RETURN: 256, // 2^8
   MANAGE_TIERS: 512, // 2^9
+  MANAGE_REVIEWERS: 1024, // 2^10
 } as const;
 
 export type PermissionAction =
@@ -22,7 +23,8 @@ export type PermissionAction =
   | "approve"
   | "reject"
   | "return"
-  | "manage_tiers";
+  | "manage_tiers"
+  | "manage_reviewers";
 
 export function hasPermission(
   userPermissions: number,
@@ -69,6 +71,8 @@ export function getRequiredPermissionForAction(
       return PERMISSIONS.RETURN;
     case "manage_tiers":
       return PERMISSIONS.MANAGE_TIERS;
+    case "manage_reviewers":
+      return PERMISSIONS.MANAGE_REVIEWERS;
     default:
       return 0;
   }

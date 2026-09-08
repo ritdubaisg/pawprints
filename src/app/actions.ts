@@ -17,6 +17,7 @@ import {
   createNotification,
   notifyPetitionSubscribers,
   getNotifications as getNotificationsLib,
+  getNotificationPage as getNotificationPageLib,
   markNotificationRead as markNotificationReadLib,
   markAllNotificationsRead as markAllNotificationsReadLib,
   getUnreadNotificationCount as getUnreadNotificationCountLib,
@@ -29,6 +30,9 @@ import {
 } from "@/lib/permissions";
 import { logAction } from "@/lib/audit";
 import { containsMaliciousLinks, extractUrls } from "@/lib/safe-browsing";
+import { loadReviewState } from "@/lib/review-state";
+import { REVIEW_STAGES, evaluateReview } from "@/lib/review-stages";
+import { notifyReviewSubmitted } from "@/lib/review-notify";
 
 const sanitizeOptions = {
   allowedTags: [
@@ -193,6 +197,94 @@ export async function getAdminPetitions(): Promise<Petition[]> {
   }));
 }
 
+/**
+ * One petition for the review detail page.
+ *
+ * Same staff gate as `getAdminPetitions`, but returns null instead of
+ * throwing so that a missing id and an unauthorised caller look identical to
+ * the client. Content goes through `processContent` because reviewers read
+ * the body as rendered HTML, exactly as the public page does.
+ */
+export async function getReviewPetition(id: number): Promise<Petition | null> {
+  if (!Number.isInteger(id) || id <= 0) return null;
+
+  const tokens = await getTokens(await cookies(), authConfig);
+  if (!tokens) return null;
+
+  const user = await prisma.user.findUnique({
+    where: { id: tokens.decodedToken.uid },
+    select: { isStaff: true, isSuperAdmin: true },
+  });
+  if (!user || (!user.isStaff && !user.isSuperAdmin)) return null;
+
+  const petition = await prisma.petition.findUnique({
+    where: { id },
+    include: {
+      tags: true,
+      author: true,
+      response: true,
+      // Oldest first: the review page renders these as a timeline.
+      updates: { orderBy: { createdAt: "asc" } },
+    },
+  });
+
+  if (!petition) return null;
+
+  const reviewState = await loadReviewState(id);
+
+  const [description, responseDescription, updates] = await Promise.all([
+    processContent(petition.description),
+    petition.response
+      ? processContent(petition.response.description)
+      : Promise.resolve(undefined),
+    Promise.all(
+      petition.updates.map(async (u) => ({
+        ...u,
+        description: await processContent(u.description),
+      })),
+    ),
+  ]);
+
+  return {
+    id: petition.id,
+    title: petition.title,
+    description,
+    tags: petition.tags,
+    author: petition.author?.displayName || petition.author?.name || petition.authorId,
+    authorEmail: petition.author?.email || undefined,
+    authorId: petition.authorId,
+    signatures: petition.signatures,
+    targetSignatures: petition.targetSignatures,
+    tier: petition.tier,
+    created_at: petition.createdAt.toISOString(),
+    status: petition.status,
+    expires: petition.expires.toISOString(),
+    last_signed: petition.lastSigned?.toISOString() || null,
+    has_response: petition.hasResponse,
+    response:
+      petition.response && responseDescription
+        ? {
+            id: petition.response.id,
+            description: responseDescription,
+            created_at: petition.response.createdAt.toISOString(),
+            author: petition.response.author,
+          }
+        : null,
+    in_progress: petition.inProgress,
+    updates: updates.map((u) => ({
+      id: u.id,
+      description: u.description,
+      created_at: u.createdAt.toISOString(),
+      author: u.author,
+    })),
+    old_id: petition.oldId,
+    review_stage: petition.reviewStage,
+    reviews: reviewState.reviews,
+    assignments: reviewState.assignments,
+    review_events: reviewState.events,
+  };
+}
+
 export async function approvePetition(
   id: number,
   tierId?: number,
@@ -204,8 +296,46 @@ export async function approvePetition(
   }
   await checkPermission(tokens.decodedToken.uid, "approve");
 
+  // Direct publication bypasses the staged pipeline, so it is a superadmin
+  // override rather than something any approver can do. Everyone else routes
+  // through `submitReview`, which publishes on its own once every stage is
+  // satisfied.
+  const actor = await prisma.user.findUnique({
+    where: { id: tokens.decodedToken.uid },
+    select: { isSuperAdmin: true },
+  });
+
+  if (!actor?.isSuperAdmin) {
+    const target = await prisma.petition.findUnique({
+      where: { id },
+      select: { reviewStage: true },
+    });
+    const state = await loadReviewState(id);
+    const progress = evaluateReview(
+      target?.reviewStage ?? 0,
+      state.reviews,
+      state.assignments,
+    );
+
+    if (!progress.complete) {
+      const current = progress.current!;
+      throw new Error(
+        `Review is not complete — ${current.stage.name} still needs ${
+          current.approvalsRemaining
+        } more approval(s)${
+          current.awaitingAssignees.length > 0
+            ? ` and sign-off from ${current.awaitingAssignees
+                .map((entry) => entry.assignee.name)
+                .join(", ")}`
+            : ""
+        }.`,
+      );
+    }
+  }
+
   const data: any = {
     status: PetitionStatus.Published,
+    reviewStage: REVIEW_STAGES.length,
   };
 
   if (tierId) {
@@ -523,16 +653,26 @@ export async function publishPetition(petitionId: number) {
     );
   }
 
-  await prisma.petition.update({
-    where: { id: petitionId },
-    data: {
-      status: PetitionStatus.NeedsReview,
-      createdAt: new Date(), // Reset created_at
-      expires: new Date(Date.now() + PETITION_DURATION_MS),
-    },
-  });
+  // Submitting starts review from scratch. Approvals are consent to a
+  // specific text; carrying them across an edit would attach someone's
+  // sign-off to wording they never read. Assignments survive — who is
+  // responsible for the petition has not changed.
+  await prisma.$transaction([
+    prisma.petitionReview.deleteMany({ where: { petitionId } }),
+    prisma.petition.update({
+      where: { id: petitionId },
+      data: {
+        status: PetitionStatus.NeedsReview,
+        reviewStage: 0,
+        createdAt: new Date(), // Reset created_at
+        expires: new Date(Date.now() + PETITION_DURATION_MS),
+      },
+    }),
+  ]);
 
   await logAction("PUBLISH_PETITION", { petitionId }, userId);
+
+  await notifyReviewSubmitted(petitionId, petition.title);
 
   revalidatePath("/");
 }
@@ -1129,6 +1269,55 @@ export async function getUserNotifications() {
   if (!tokens) return [];
   const userId = tokens.decodedToken.uid;
   return await getNotificationsLib(userId);
+}
+
+export interface NotificationPageItem {
+  id: number;
+  title: string;
+  message: string;
+  type: string;
+  read: boolean;
+  createdAt: string;
+  petitionId: number | null;
+  petition: { id: number; title: string } | null;
+}
+
+/** Backs the full notifications page: paged, with an unread-only filter. */
+export async function getNotificationPage(options?: {
+  skip?: number;
+  take?: number;
+  unreadOnly?: boolean;
+}): Promise<{
+  items: NotificationPageItem[];
+  total: number;
+  unread: number;
+}> {
+  const tokens = await getTokens(await cookies(), authConfig);
+  if (!tokens) return { items: [], total: 0, unread: 0 };
+
+  const { items, total, unread } = await getNotificationPageLib(
+    tokens.decodedToken.uid,
+    {
+      skip: Math.max(options?.skip ?? 0, 0),
+      take: Math.min(Math.max(options?.take ?? 25, 1), 100),
+      unreadOnly: !!options?.unreadOnly,
+    },
+  );
+
+  return {
+    items: items.map((item) => ({
+      id: item.id,
+      title: item.title,
+      message: item.message,
+      type: item.type,
+      read: item.read,
+      createdAt: item.createdAt.toISOString(),
+      petitionId: item.petitionId,
+      petition: item.petition,
+    })),
+    total,
+    unread,
+  };
 }
 
 export async function markNotificationAsRead(id: number) {

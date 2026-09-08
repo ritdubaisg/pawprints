@@ -1,44 +1,27 @@
-"use client";
+import { redirect } from "next/navigation";
+import { getAdminPetitions, getStaffPermissions } from "@/app/actions";
+import { getMyReviewQueueIds } from "@/app/review-actions";
+import { ReviewBrowser } from "@/components/review/ReviewBrowser";
 
-import { useEffect, useState } from "react";
-import { Petition } from "@/types/petition";
-import { getAdminPetitions } from "@/app/actions";
-import AdminGuard from "@/components/AdminGuard/AdminGuard";
-import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
-import { ReviewDashboard } from "@/components/review/dashboard";
+export const metadata = {
+  title: "Review",
+};
 
-export default function ReviewPage() {
-  const [petitions, setPetitions] = useState<Petition[]>([]);
-  const [loading, setLoading] = useState(true);
+/**
+ * The reviewer's home: every petition in one list, filtered by a query
+ * string. Gated on the server so a non-staff visitor never receives the data,
+ * rather than being bounced by a client-side guard after it has loaded.
+ */
+export default async function ReviewPage() {
+  const perms = await getStaffPermissions();
+  if (!perms.isStaff && !perms.isSuperAdmin) {
+    redirect("/");
+  }
 
-  useEffect(() => {
-    loadPetitions();
-  }, []);
+  const [petitions, assignedIds] = await Promise.all([
+    getAdminPetitions(),
+    getMyReviewQueueIds(),
+  ]);
 
-  const loadPetitions = async () => {
-    try {
-      const data = await getAdminPetitions();
-      setPetitions(data);
-    } catch (error) {
-      console.error("Error fetching petitions:", error);
-      toast.error("Failed to load petitions");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <AdminGuard>
-      <div className="flex flex-col h-[calc(100vh-4rem)] bg-background">
-        {loading ? (
-          <div className="flex h-full w-full items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-[#F76902]" />
-          </div>
-        ) : (
-          <ReviewDashboard petitions={petitions} onRefresh={loadPetitions} />
-        )}
-      </div>
-    </AdminGuard>
-  );
+  return <ReviewBrowser petitions={petitions} assignedIds={assignedIds} />;
 }

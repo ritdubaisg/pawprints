@@ -14,6 +14,14 @@ export const PERMISSION_PRESETS = [
     value: PERMISSIONS.APPROVE | PERMISSIONS.REJECT | PERMISSIONS.RETURN,
   },
   {
+    label: "Review lead (reviewer + assign reviewers)",
+    value:
+      PERMISSIONS.APPROVE |
+      PERMISSIONS.REJECT |
+      PERMISSIONS.RETURN |
+      PERMISSIONS.MANAGE_REVIEWERS,
+  },
+  {
     label: "Responder (updates + responses)",
     value:
       PERMISSIONS.ADD_UPDATE |
@@ -40,6 +48,7 @@ export const PERMISSION_LABELS: Record<keyof typeof PERMISSIONS, string> = {
   REJECT: "Reject petitions",
   RETURN: "Return petitions for changes",
   MANAGE_TIERS: "Manage petition tiers",
+  MANAGE_REVIEWERS: "Assign reviewers to petitions",
 };
 
 /** The names of every bit set in `permInt`, for display. */

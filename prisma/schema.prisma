@@ -11,12 +11,12 @@ datasource db {
 }
 
 model User {
-  id        String     @id // Firebase UID
-  email     String     @unique
-  name      String?
-  displayName String?
-  hasAccess Int        @default(1)
-  isStaff   Boolean    @default(false)
+  id           String  @id // Firebase UID
+  email        String  @unique
+  name         String?
+  displayName  String?
+  hasAccess    Int     @default(1)
+  isStaff      Boolean @default(false)
   isSuperAdmin Boolean @default(false)
   permissions  Int     @default(0)
 
@@ -38,17 +38,25 @@ model User {
 
   notificationSettings NotificationSettings?
 
-  reports   Report[]
+  reports       Report[]
   notifications Notification[]
   auditLogs     AuditLog[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+
+  petitionReviews    PetitionReview[]
+  reviewAssignments  PetitionAssignment[]  @relation("ReviewAssignee")
+  assignmentsMade    PetitionAssignment[]  @relation("AssignedBy")
+  reviewPools        ReviewStageMember[]   @relation("PoolMember")
+  poolMembersAdded   ReviewStageMember[]   @relation("PoolAddedBy")
+  reviewEventsCaused PetitionReviewEvent[] @relation("ReviewEventActor")
+  reviewEventsAbout  PetitionReviewEvent[] @relation("ReviewEventSubject")
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
 }
 
 model NotificationSettings {
-  id        Int     @id @default(autoincrement())
-  userId    String  @unique
-  user      User    @relation(fields: [userId], references: [id])
+  id     Int    @id @default(autoincrement())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
 
   update    Boolean @default(true)
   response  Boolean @default(true)
@@ -64,7 +72,7 @@ model Notification {
   message   String
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
-  type      String   // UPDATE, RESPONSE, THRESHOLD, REPORT, SYSTEM
+  type      String // UPDATE, RESPONSE, THRESHOLD, REPORT, SYSTEM
 
   petitionId Int?
   petition   Petition? @relation(fields: [petitionId], references: [id])
@@ -80,31 +88,39 @@ model GlobalAlert {
 }
 
 model Petition {
-  id            Int       @id @default(autoincrement())
-  title         String    @db.VarChar(150)
-  description   String
-  authorId      String
-  author        User      @relation("CreatedPetitions", fields: [authorId], references: [id])
-  signers       User[]    @relation("SignedPetitions")
-  subscribers   User[]    @relation("SubscribedPetitions")
-  signatures    Int       @default(0)
-  targetSignatures Int    @default(200)
-  tier          Int       @default(3)
-  createdAt     DateTime  @default(now())
-  status        Int       @default(0) // 0: New, 1: Published, 2: Removed, 3: NeedsReview
-  expires       DateTime
-  lastSigned    DateTime?
-  hasResponse   Boolean   @default(false)
+  id                  Int       @id @default(autoincrement())
+  title               String    @db.VarChar(150)
+  description         String
+  authorId            String
+  author              User      @relation("CreatedPetitions", fields: [authorId], references: [id])
+  signers             User[]    @relation("SignedPetitions")
+  subscribers         User[]    @relation("SubscribedPetitions")
+  signatures          Int       @default(0)
+  targetSignatures    Int       @default(200)
+  tier                Int       @default(3)
+  createdAt           DateTime  @default(now())
+  status              Int       @default(0) // 0: New, 1: Published, 2: Removed, 3: NeedsReview
+  expires             DateTime
+  lastSigned          DateTime?
+  hasResponse         Boolean   @default(false)
   thresholdNotifiedAt DateTime?
-  responseId    Int?
-  response      Response? @relation(fields: [responseId], references: [id])
+  responseId          Int?
+  response            Response? @relation(fields: [responseId], references: [id])
 
-  inProgress    Boolean?  @default(false)
-  updates       Update[]
-  tags          Tag[]
-  oldId         String?
+  inProgress Boolean? @default(false)
+  updates    Update[]
+  tags       Tag[]
+  oldId      String?
 
-  reports       Report[]
+  // Index into REVIEW_STAGES (lib/review-stages.ts). Every stage below this
+  // one has already been satisfied; equal to the stage count means review is
+  // complete. Resubmission after a return resets it to 0.
+  reviewStage  Int                   @default(0)
+  reviews      PetitionReview[]
+  assignments  PetitionAssignment[]
+  reviewEvents PetitionReviewEvent[]
+
+  reports Report[]
 
   notifications Notification[]
 
@@ -120,17 +136,17 @@ model Tag {
 }
 
 model Response {
-  id          Int      @id @default(autoincrement())
+  id          Int        @id @default(autoincrement())
   description String
-  createdAt   DateTime @default(now())
+  createdAt   DateTime   @default(now())
   author      String
   petitions   Petition[]
 }
 
 model Update {
-  id          Int      @id @default(autoincrement())
+  id          Int        @id @default(autoincrement())
   description String
-  createdAt   DateTime @default(now())
+  createdAt   DateTime   @default(now())
   author      String?
   petitions   Petition[]
 }
@@ -158,9 +174,91 @@ model AuditLog {
   @@index([createdAt])
 }
 
+/**
+ * One reviewer's decision on one stage of one petition.
+ * Unique per (petition, stage, reviewer): submitting again replaces the
+ * earlier decision rather than stacking, so a reviewer who requested changes
+ * can approve later without their block lingering.
+ */
+model PetitionReview {
+  id         Int      @id @default(autoincrement())
+  petitionId Int
+  petition   Petition @relation(fields: [petitionId], references: [id])
+  reviewerId String
+  reviewer   User     @relation(fields: [reviewerId], references: [id])
+  stage      Int
+  decision   String // APPROVE | CHANGES_REQUESTED
+  comment    String?
+  createdAt  DateTime @default(now())
+
+  @@unique([petitionId, stage, reviewerId])
+  @@index([petitionId])
+}
+
+/**
+ * A named reviewer a petition is waiting on. Assignment is additive to the
+ * quorum: a stage needs its minimum approvals AND an approval from every
+ * person assigned to it.
+ */
+model PetitionAssignment {
+  id           Int      @id @default(autoincrement())
+  petitionId   Int
+  petition     Petition @relation(fields: [petitionId], references: [id])
+  assigneeId   String
+  assignee     User     @relation("ReviewAssignee", fields: [assigneeId], references: [id])
+  stage        Int
+  assignedById String?
+  assignedBy   User?    @relation("AssignedBy", fields: [assignedById], references: [id])
+  createdAt    DateTime @default(now())
+
+  @@unique([petitionId, stage, assigneeId])
+  @@index([petitionId])
+}
+
+/**
+ * Who is allowed to review at a given stage.
+ * Membership is the authority: being in the "sg" pool is what makes someone a
+ * Student Government reviewer, not a permission bit or a job title. Only
+ * superadmins edit these lists, and `stageKey` matches a key in REVIEW_STAGES
+ * so a stage added to that array simply starts with an empty pool.
+ */
+model ReviewStageMember {
+  id        Int      @id @default(autoincrement())
+  stageKey  String
+  userId    String
+  user      User     @relation("PoolMember", fields: [userId], references: [id])
+  addedById String?
+  addedBy   User?    @relation("PoolAddedBy", fields: [addedById], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([stageKey, userId])
+  @@index([stageKey])
+}
+
+/**
+ * Assignment history, as opposed to current state.
+ * `PetitionAssignment` only says who is assigned now, so removing someone
+ * erased the fact that they ever were. The timeline needs the record, not the
+ * state — these rows are append-only and never deleted.
+ */
+model PetitionReviewEvent {
+  id         Int      @id @default(autoincrement())
+  petitionId Int
+  petition   Petition @relation(fields: [petitionId], references: [id])
+  type       String // ASSIGNED | UNASSIGNED
+  stage      Int
+  actorId    String?
+  actor      User?    @relation("ReviewEventActor", fields: [actorId], references: [id])
+  subjectId  String
+  subject    User     @relation("ReviewEventSubject", fields: [subjectId], references: [id])
+  createdAt  DateTime @default(now())
+
+  @@index([petitionId])
+}
+
 model LinkSafetyCache {
-  url       String   @id
-  isSafe    Boolean
-  checkedAt DateTime @default(now())
+  url        String   @id
+  isSafe     Boolean
+  checkedAt  DateTime @default(now())
   threatType String?
 }

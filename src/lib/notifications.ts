@@ -1,7 +1,18 @@
 import { prisma } from "@/lib/prisma";
 
 export type NotificationType =
-  "UPDATE" | "RESPONSE" | "THRESHOLD" | "REPORT" | "SYSTEM";
+  | "UPDATE"
+  | "RESPONSE"
+  | "THRESHOLD"
+  | "REPORT"
+  | "SYSTEM"
+  /**
+   * Review workflow: assignment, hand-offs between stages, and the nudge when
+   * a stage is one approval from done. Always delivered — these are the
+   * operational messages a reviewer has to act on, not activity noise, and
+   * NotificationSettings has no column to opt out of them.
+   */
+  | "REVIEW";
 
 export async function createNotification(
   userId: string,
@@ -31,6 +42,7 @@ export async function createNotification(
         shouldNotify = settings.threshold;
         break;
       case "SYSTEM":
+      case "REVIEW":
         shouldNotify = true;
         break;
     }
@@ -49,6 +61,7 @@ export async function createNotification(
         shouldNotify = true;
         break;
       case "SYSTEM":
+      case "REVIEW":
         shouldNotify = true;
         break;
     }
@@ -65,6 +78,55 @@ export async function createNotification(
       petitionId,
     },
   });
+}
+
+/** Sends the same message to several people in one insert. */
+export async function createNotifications(
+  userIds: string[],
+  title: string,
+  message: string,
+  type: NotificationType,
+  petitionId?: number,
+) {
+  const unique = Array.from(new Set(userIds)).filter(Boolean);
+  if (unique.length === 0) return;
+
+  await prisma.notification.createMany({
+    data: unique.map((userId) => ({
+      userId,
+      title,
+      message,
+      type,
+      petitionId,
+      read: false,
+    })),
+  });
+}
+
+/**
+ * A page of notifications, for the full list at /notifications. The bell keeps
+ * using `getNotifications`, which is capped at the most recent handful.
+ */
+export async function getNotificationPage(
+  userId: string,
+  options: { skip?: number; take?: number; unreadOnly?: boolean } = {},
+) {
+  const { skip = 0, take = 25, unreadOnly = false } = options;
+  const where = { userId, ...(unreadOnly ? { read: false } : {}) };
+
+  const [items, total, unread] = await Promise.all([
+    prisma.notification.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take,
+      include: { petition: { select: { id: true, title: true } } },
+    }),
+    prisma.notification.count({ where }),
+    prisma.notification.count({ where: { userId, read: false } }),
+  ]);
+
+  return { items, total, unread };
 }
 
 export async function getNotifications(userId: string) {

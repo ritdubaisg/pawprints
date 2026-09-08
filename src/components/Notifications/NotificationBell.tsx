@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Bell, Check, CheckCheck } from "lucide-react";
+import { ArrowRight, Bell, Check, CheckCheck } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,7 +18,6 @@ import {
 } from "@/app/actions";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { time } from "node:console";
 
 interface NotificationItem {
   id: number;
@@ -226,6 +225,19 @@ export const NotificationBell = () => {
             </div>
           )}
         </ScrollArea>
+        <div className="border-t p-2">
+          <Button
+            asChild
+            variant="ghost"
+            size="sm"
+            className="w-full justify-center text-sm"
+          >
+            <Link href="/notifications" onClick={() => setIsOpen(false)}>
+              View all notifications
+              <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+            </Link>
+          </Button>
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );
