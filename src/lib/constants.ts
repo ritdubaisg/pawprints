@@ -43,3 +43,12 @@ export const PETITION_CATEGORIES = [
 export const PETITION_DURATION_DAYS = 180;
 export const PETITION_DURATION_MS =
   PETITION_DURATION_DAYS * 24 * 60 * 60 * 1000;
+
+/**
+ * Rows per page in the admin audit log and user tables.
+ *
+ * Lives here rather than in actions.ts because that file is "use server",
+ * where every export has to be an async function.
+ */
+export const ADMIN_PAGE_SIZE = 50;
+export const ADMIN_MAX_PAGE_SIZE = 100;
