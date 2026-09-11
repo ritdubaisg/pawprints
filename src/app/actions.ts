@@ -33,6 +33,7 @@ import { containsMaliciousLinks, extractUrls } from "@/lib/safe-browsing";
 import { loadReviewState } from "@/lib/review-state";
 import { REVIEW_STAGES, evaluateReview } from "@/lib/review-stages";
 import { notifyReviewSubmitted } from "@/lib/review-notify";
+import { assertMinimumVisibleTextLength } from "@/lib/text-validation";
 
 const sanitizeOptions = {
   allowedTags: [
@@ -464,6 +465,19 @@ export async function createPetition(data: {
 
   const validatedData = schema.parse(data);
 
+  assertMinimumVisibleTextLength(
+    validatedData.title,
+    10,
+    "Title cannot be empty.",
+    "Title must contain at least 10 non-whitespace characters.",
+  );
+  assertMinimumVisibleTextLength(
+    validatedData.description,
+    50,
+    "Description cannot be empty.",
+    "Description must contain at least 50 non-whitespace characters.",
+  );
+
   const urls = extractUrls(validatedData.description);
   const { isSafe, maliciousUrls } = await containsMaliciousLinks(urls);
   if (!isSafe) {
@@ -559,6 +573,19 @@ export async function updatePetition(
   });
 
   const validatedData = schema.parse(data);
+
+  assertMinimumVisibleTextLength(
+    validatedData.title,
+    10,
+    "Title cannot be empty.",
+    "Title must contain at least 10 non-whitespace characters.",
+  );
+  assertMinimumVisibleTextLength(
+    validatedData.description,
+    50,
+    "Description cannot be empty.",
+    "Description must contain at least 50 non-whitespace characters.",
+  );
 
   const urls = extractUrls(validatedData.description);
   const { isSafe, maliciousUrls } = await containsMaliciousLinks(urls);
@@ -1046,6 +1073,13 @@ export async function addUpdate(petitionId: number, description: string) {
   });
   schema.parse({ petitionId, description });
 
+  assertMinimumVisibleTextLength(
+    description,
+    1,
+    "Description cannot be empty.",
+    "Description cannot be empty.",
+  );
+
   const urls = extractUrls(description);
   const { isSafe, maliciousUrls } = await containsMaliciousLinks(urls);
   if (!isSafe) {
@@ -1097,6 +1131,13 @@ export async function addResponse(petitionId: number, description: string) {
     description: z.string().min(1, "Description cannot be empty"),
   });
   schema.parse({ petitionId, description });
+
+  assertMinimumVisibleTextLength(
+    description,
+    1,
+    "Description cannot be empty.",
+    "Description cannot be empty.",
+  );
 
   const urls = extractUrls(description);
   const { isSafe, maliciousUrls } = await containsMaliciousLinks(urls);
@@ -1204,6 +1245,13 @@ export async function editUpdate(updateId: number, description: string) {
   });
   schema.parse({ updateId, description });
 
+  assertMinimumVisibleTextLength(
+    description,
+    1,
+    "Description cannot be empty.",
+    "Description cannot be empty.",
+  );
+
   const urls = extractUrls(description);
   const { isSafe, maliciousUrls } = await containsMaliciousLinks(urls);
   if (!isSafe) {
@@ -1237,6 +1285,13 @@ export async function editResponse(responseId: number, description: string) {
     description: z.string().min(1, "Description cannot be empty"),
   });
   schema.parse({ responseId, description });
+
+  assertMinimumVisibleTextLength(
+    description,
+    1,
+    "Description cannot be empty.",
+    "Description cannot be empty.",
+  );
 
   const urls = extractUrls(description);
   const { isSafe, maliciousUrls } = await containsMaliciousLinks(urls);
