@@ -26,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { getVisibleTextLength } from "@/lib/text-validation";
 
 export interface PetitionFormData {
   title: string;
@@ -90,14 +91,44 @@ export const formSchema = z.object({
     .string()
     .min(10, "Title must be at least 10 characters")
     .max(150, "Title must be less than 150 characters")
-    .regex(/^[^<>]*$/, "HTML not allowed in title"),
+    .regex(/^[^<>]*$/, "HTML not allowed in title")
+    .superRefine((value, ctx) => {
+      const visibleLength = getVisibleTextLength(value);
+      if (visibleLength === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Title cannot be empty",
+        });
+        return;
+      }
+
+      if (visibleLength < 10) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Title must contain at least 10 non-whitespace characters",
+        });
+      }
+    }),
   description: z
     .string()
-    .min(50, "Description must be at least 50 characters")
-    .refine(
-      (val) => val !== "<p><br></p>" && val.trim() !== "",
-      "Description is required",
-    ),
+    .superRefine((value, ctx) => {
+      const visibleLength = getVisibleTextLength(value);
+      if (visibleLength === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Description cannot be empty",
+        });
+        return;
+      }
+
+      if (visibleLength < 50) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "Description must contain at least 50 non-whitespace characters",
+        });
+      }
+    }),
   category: z.string().min(1, "Please select a category"),
   targetSignatures: z.number(),
   expiresDate: z.string().optional(),
