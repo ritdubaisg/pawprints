@@ -9,10 +9,12 @@ import { PetitionStatus, Petition, ReviewDecision } from "@/types/petition";
 import { z } from "zod";
 import sanitizeHtml from "sanitize-html";
 import {
+  PETITION_DESCRIPTION_MIN_LENGTH,
   PETITION_DURATION_MS,
   PETITION_THRESHOLD,
   PETITION_TIERS,
 } from "@/lib/constants";
+import { plainTextLength } from "@/lib/petition-text";
 import {
   createNotification,
   notifyPetitionSubscribers,
@@ -498,7 +500,12 @@ export async function createPetition(data: {
       .min(10)
       .max(150)
       .regex(/^[^<>]*$/, "HTML not allowed in title"),
-    description: z.string().min(50),
+    description: z
+      .string()
+      .refine(
+        (value) => plainTextLength(value) >= PETITION_DESCRIPTION_MIN_LENGTH,
+        `Description must be at least ${PETITION_DESCRIPTION_MIN_LENGTH} characters`,
+      ),
     tags: z.array(z.string()).min(1, "At least one category is required"),
     expires: z.string().optional(),
     isDraft: z.boolean().optional(),
@@ -594,7 +601,12 @@ export async function updatePetition(
       .min(10)
       .max(150)
       .regex(/^[^<>]*$/, "HTML not allowed in title"),
-    description: z.string().min(50),
+    description: z
+      .string()
+      .refine(
+        (value) => plainTextLength(value) >= PETITION_DESCRIPTION_MIN_LENGTH,
+        `Description must be at least ${PETITION_DESCRIPTION_MIN_LENGTH} characters`,
+      ),
     tags: z.array(z.string()).min(1, "At least one category is required"),
     expires: z.string().optional(),
     isDraft: z.boolean().optional(),

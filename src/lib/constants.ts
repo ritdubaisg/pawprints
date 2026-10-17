@@ -43,3 +43,9 @@ export const PETITION_CATEGORIES = [
 export const PETITION_DURATION_DAYS = 180;
 export const PETITION_DURATION_MS =
   PETITION_DURATION_DAYS * 24 * 60 * 60 * 1000;
+
+/**
+ * Minimum length of a petition description, counted in visible characters —
+ * see `plainTextLength` in lib/petition-text.ts.
+ */
+export const PETITION_DESCRIPTION_MIN_LENGTH = 250;

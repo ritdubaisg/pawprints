@@ -26,6 +26,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { PETITION_DESCRIPTION_MIN_LENGTH } from "@/lib/constants";
+import { plainTextLength } from "@/lib/petition-text";
+import { cn } from "@/lib/utils";
 
 export interface PetitionFormData {
   title: string;
@@ -93,10 +96,13 @@ export const formSchema = z.object({
     .regex(/^[^<>]*$/, "HTML not allowed in title"),
   description: z
     .string()
-    .min(50, "Description must be at least 50 characters")
     .refine(
       (val) => val !== "<p><br></p>" && val.trim() !== "",
       "Description is required",
+    )
+    .refine(
+      (val) => plainTextLength(val) >= PETITION_DESCRIPTION_MIN_LENGTH,
+      `Description must be at least ${PETITION_DESCRIPTION_MIN_LENGTH} characters`,
     ),
   category: z.string().min(1, "Please select a category"),
   targetSignatures: z.number(),
@@ -227,9 +233,12 @@ export default function PetitionForm({
                   />
                 </div>
               </FormControl>
-              <FormDescription>
-                Minimum 50 characters. Be clear and specific about what you're
-                asking for.
+              <FormDescription className="flex flex-wrap justify-between gap-x-4">
+                <span>
+                  Minimum {PETITION_DESCRIPTION_MIN_LENGTH} characters. Be clear
+                  and specific about what you&apos;re asking for.
+                </span>
+                <DescriptionCounter html={field.value} />
               </FormDescription>
               <FormMessage />
             </FormItem>
@@ -260,32 +269,6 @@ export default function PetitionForm({
             </FormItem>
           )}
         /> */}
-
-        <div className="mt-16">
-          <p>
-            Use of this site falls under the{" "}
-            <a
-              href="https://www.rit.edu/policies/c082"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
-            >
-              RIT Code of Conduct for Computer and Network Use
-            </a>
-            .
-          </p>
-          <br />
-          <p>
-            When using this service, you agree to sign petitions from only one
-            RIT Computer Account. Should you have access to more than one
-            account, you will only sign from your primary student, faculty, or
-            staff account.
-          </p>
-          <br />
-          <p className="font-bold">
-            Please exercise good judgment when using this service.
-          </p>
-        </div>
 
         {children ? (
           children
@@ -318,5 +301,20 @@ export default function PetitionForm({
         )}
       </form>
     </Form>
+  );
+}
+
+function DescriptionCounter({ html }: { html: string }) {
+  const length = plainTextLength(html ?? "");
+  const met = length >= PETITION_DESCRIPTION_MIN_LENGTH;
+  return (
+    <span
+      className={cn(
+        "tabular-nums",
+        met && "text-emerald-700 dark:text-emerald-400",
+      )}
+    >
+      {length}/{PETITION_DESCRIPTION_MIN_LENGTH}
+    </span>
   );
 }

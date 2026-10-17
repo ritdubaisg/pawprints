@@ -14,11 +14,18 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { useDebounce } from "@/hooks/use-debounce";
+import {
+  IncidentNotice,
+  SubmitForReviewDialog,
+} from "@/components/PetitionForm/SubmitForReviewDialog";
 
 export default function New() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [petitionId, setPetitionId] = useState<number | null>(null);
+  // The form only opens the agreement dialog; the dialog does the submitting.
+  const [pendingSubmission, setPendingSubmission] =
+    useState<FormValues | null>(null);
   const router = useRouter();
 
   const isSavingRef = useRef(false);
@@ -124,6 +131,7 @@ export default function New() {
         });
       }
 
+      setPendingSubmission(null);
       toast.success(
         "Petition submitted for review! You will be notified when it is approved.",
       );
@@ -147,7 +155,7 @@ export default function New() {
             </h1>
             <p className="text-muted-foreground text-lg">
               Make your voice heard. Start a petition to bring about positive
-              change at RIT.
+              change at RIT Dubai.
             </p>
           </div>
           <div className="text-right h-6 flex items-center">
@@ -178,31 +186,14 @@ export default function New() {
 
           <div className="grid gap-6 md:grid-cols-1 mb-8">
             <div>
-              <p className="text-muted-foreground font-bold">
-                Please remember, if this petition is about another person,
-                staff, or faculty member, talk to Student Affairs or{" "}
-                <a
-                  href="https://www.rit.edu/dubai/incident-report"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  report an incident
-                </a>{" "}
-                instead. Student Government reserves the right to edit or remove
-                any petition at any time for violating the Code of Conduct. This
-                includes, but is not limited to, creating an intimidating,
-                hostile, or abusive environment for any member of the RIT
-                community, or posting of any obscene, defamatory, threatening,
-                or otherwise harassing petitions.
-              </p>
+              <IncidentNotice className="text-muted-foreground font-bold" />
             </div>
           </div>
         </div>
 
         <PetitionForm
           form={form}
-          onSubmit={handleSubmit}
+          onSubmit={setPendingSubmission}
           isSubmitting={isSubmitting}
         >
           <div className="flex justify-end gap-4 pt-4 items-center">
@@ -241,6 +232,17 @@ export default function New() {
             </Button>
           </div>
         </PetitionForm>
+
+        <SubmitForReviewDialog
+          open={pendingSubmission !== null}
+          onOpenChange={(open) => {
+            if (!open) setPendingSubmission(null);
+          }}
+          onConfirm={() => {
+            if (pendingSubmission) handleSubmit(pendingSubmission);
+          }}
+          isSubmitting={isSubmitting}
+        />
       </div>
     </div>
   );

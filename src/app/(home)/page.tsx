@@ -5,6 +5,7 @@ import { authConfig } from "@/app/config/server-config";
 import { getPetitions } from "@/app/actions";
 import PublicHome from "@/components/Home/PublicHome";
 import LoggedInHome from "@/components/Home/LoggedInHome";
+import { buildHomeSections } from "@/lib/petition-sections";
 
 export const revalidate = 60; // ISR: Revalidate every 60 seconds
 
@@ -15,9 +16,7 @@ export default async function Home() {
     return <PublicHome />;
   }
 
-  const petitions = await getPetitions();
-
-  const trendingPetitions = petitions;
+  const sections = buildHomeSections(await getPetitions());
 
   return (
     <Suspense
@@ -27,7 +26,7 @@ export default async function Home() {
         </div>
       }
     >
-      <LoggedInHome trendingPetitions={trendingPetitions} />
+      <LoggedInHome sections={sections} />
     </Suspense>
   );
 }

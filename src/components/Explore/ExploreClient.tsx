@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, Suspense } from "react";
-import { useAuth } from "@/app/auth/AuthContext";
+import React, { useState, useMemo, useEffect } from "react";
 import { SearchBar, PetitionGrid, SearchResults } from "@/components";
+import { ALL } from "@/components/SearchBar/SearchBar";
 import { useDebounce } from "@/hooks/use-debounce";
+import { getPetitionProgress } from "@/lib/petition-sections";
 import { Petition } from "@/types/petition";
 import { useRouter } from "next/navigation";
 
@@ -14,11 +15,11 @@ interface ExploreClientProps {
 export default function ExploreClient({
   initialPetitions,
 }: ExploreClientProps) {
-  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedFilter, setSelectedFilter] = useState("All");
+  const [selectedFilter, setSelectedFilter] = useState(ALL);
+  const [selectedStatus, setSelectedStatus] = useState(ALL);
   const [isSearchLoading, setIsSearchLoading] = useState(false);
-  const [petitions, setPetitions] = useState<Petition[]>(initialPetitions);
+  const [petitions] = useState<Petition[]>(initialPetitions);
 
   const router = useRouter();
 
@@ -36,11 +37,22 @@ export default function ExploreClient({
     }
   }, [searchTerm, debouncedSearchTerm]);
 
+  const clearAll = () => {
+    setSearchTerm("");
+    setSelectedFilter(ALL);
+    setSelectedStatus(ALL);
+  };
+
   const filteredPetitions = useMemo(() => {
-    if (debouncedSearchTerm === "" && selectedFilter === "All") {
+    if (
+      debouncedSearchTerm === "" &&
+      selectedFilter === ALL &&
+      selectedStatus === ALL
+    ) {
       return petitions;
     }
 
+    const now = Date.now();
     return petitions.filter((petition) => {
       const matchesSearch =
         debouncedSearchTerm === "" ||
@@ -49,20 +61,27 @@ export default function ExploreClient({
           .includes(debouncedSearchTerm.toLowerCase());
 
       const matchesFilter =
-        selectedFilter === "All" ||
+        selectedFilter === ALL ||
         petition.tags.some((tag) => tag.name === selectedFilter);
 
-      return matchesSearch && matchesFilter;
+      const matchesStatus =
+        selectedStatus === ALL ||
+        getPetitionProgress(petition, now) === selectedStatus;
+
+      return matchesSearch && matchesFilter && matchesStatus;
     });
-  }, [petitions, debouncedSearchTerm, selectedFilter]);
+  }, [petitions, debouncedSearchTerm, selectedFilter, selectedStatus]);
 
   return (
     <div className="w-full flex flex-col px-4 sm:px-8 lg:px-20 py-10 bg-background text-foreground">
       <SearchBar
-        onSearchChange={setSearchTerm}
-        onFilterChange={setSelectedFilter}
         searchTerm={searchTerm}
         selectedFilter={selectedFilter}
+        selectedStatus={selectedStatus}
+        onSearchChange={setSearchTerm}
+        onFilterChange={setSelectedFilter}
+        onStatusChange={setSelectedStatus}
+        onClearAll={clearAll}
       />
       <div className="flex flex-col mt-8 w-full">
         <SearchResults
@@ -70,6 +89,8 @@ export default function ExploreClient({
           resultsCount={filteredPetitions.length}
           searchTerm={debouncedSearchTerm}
           selectedFilter={selectedFilter}
+          selectedStatus={selectedStatus}
+          onClearAll={clearAll}
         />
         <PetitionGrid
           petitions={filteredPetitions}

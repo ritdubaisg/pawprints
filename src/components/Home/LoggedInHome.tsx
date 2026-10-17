@@ -8,67 +8,63 @@ import { Petition } from "@/types/petition";
 import { useRouter } from "next/navigation";
 import { PlusCircle, Search, ClipboardCheck } from "lucide-react";
 import { checkAdminAccess } from "@/app/actions";
-import { SearchBar, PetitionGrid, SearchResults } from "@/components";
-import { useDebounce } from "@/hooks/use-debounce";
+import { useVisitedPetitions } from "@/hooks/use-visited-petitions";
+import type { HomeSections } from "@/lib/petition-sections";
+import PetitionCarouselSection from "./PetitionCarouselSection";
 
 interface LoggedInHomeProps {
-  trendingPetitions: Petition[];
+  sections: HomeSections;
 }
 
-export default function LoggedInHome({ trendingPetitions }: LoggedInHomeProps) {
+export default function LoggedInHome({ sections }: LoggedInHomeProps) {
   const { user } = useAuth();
   const router = useRouter();
   const [isAdmin, setIsAdmin] = useState(false);
-
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedFilter, setSelectedFilter] = useState("All");
-  const [isSearchLoading, setIsSearchLoading] = useState(false);
-
-  const debouncedSearchTerm = useDebounce(searchTerm, 1000);
+  const { visitedIds } = useVisitedPetitions();
 
   const handlePetitionClick = (petition: Petition) => {
     router.push(`/petitions/${petition.id}`);
   };
 
   useEffect(() => {
-    if (searchTerm !== debouncedSearchTerm) {
-      setIsSearchLoading(true);
-    } else {
-      setIsSearchLoading(false);
-    }
-  }, [searchTerm, debouncedSearchTerm]);
-
-  useEffect(() => {
     checkAdminAccess().then(setIsAdmin).catch(console.error);
   }, []);
 
-  const filteredPetitions = useMemo(() => {
-    const sortedPetitions = [...trendingPetitions].sort(
-      (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-    );
+  // Trending is ranked on the server; here we only lift what this person has
+  // not opened yet to the front, keeping the ranking within each group.
+  const trending = useMemo(() => {
+    const unvisited = sections.trending.filter((p) => !visitedIds.has(p.id));
+    const visited = sections.trending.filter((p) => visitedIds.has(p.id));
+    return [...unvisited, ...visited];
+  }, [sections.trending, visitedIds]);
 
-    if (debouncedSearchTerm === "" && selectedFilter === "All") {
-      return sortedPetitions;
-    }
-
-    return sortedPetitions.filter((petition) => {
-      const matchesSearch =
-        debouncedSearchTerm === "" ||
-        petition.title
-          .toLowerCase()
-          .includes(debouncedSearchTerm.toLowerCase());
-
-      const matchesFilter =
-        selectedFilter === "All" ||
-        petition.tags.some((tag) => tag.name === selectedFilter);
-
-      return matchesSearch && matchesFilter;
-    });
-  }, [trendingPetitions, debouncedSearchTerm, selectedFilter]);
+  const rows = [
+    {
+      title: "Trending on campus",
+      petitions: trending,
+    },
+    {
+      title: "Recent",
+      petitions: sections.newest,
+    },
+    {
+      title: "Almost there",
+      petitions: sections.nearlyThere,
+    },
+    {
+      title: "Recently updated",
+      petitions: sections.updated,
+    },
+    {
+      title: "Responded",
+      petitions: sections.responded,
+    },
+  ].filter((row) => row.petitions.length > 0);
 
   return (
-    <div className="container mx-auto px-6 py-24">
+    // Not a container itself: the carousels run edge to edge, and only the
+    // header and each row's title line up with the page container.
+    <div className="overflow-x-clip py-24">
       <div
         className="absolute left-0 right-0 h-48 pointer-events-none"
         style={{
@@ -81,7 +77,7 @@ export default function LoggedInHome({ trendingPetitions }: LoggedInHomeProps) {
         }}
       />
 
-      <div className="flex flex-col md:flex-row justify-between items-center mb-12 gap-6 relative">
+      <div className="container mx-auto px-6 flex flex-col md:flex-row justify-between items-center mb-12 gap-6 relative">
         <div>
           <h1 className="text-4xl font-bold text-primary mb-2">
             Welcome back, {user?.displayName || "tiger"}!
@@ -114,38 +110,25 @@ export default function LoggedInHome({ trendingPetitions }: LoggedInHomeProps) {
         </div>
       </div>
 
-      <div className="w-full flex flex-col bg-background text-foreground">
-        <SearchBar
-          onSearchChange={setSearchTerm}
-          onFilterChange={setSelectedFilter}
-          searchTerm={searchTerm}
-          selectedFilter={selectedFilter}
-        />
-        <div className="flex flex-col mt-8 w-full">
-          <SearchResults
-            isLoading={isSearchLoading}
-            resultsCount={filteredPetitions.length}
-            searchTerm={debouncedSearchTerm}
-            selectedFilter={selectedFilter}
-          />
-          {!isSearchLoading &&
-          filteredPetitions.length === 0 &&
-          debouncedSearchTerm === "" &&
-          selectedFilter === "All" ? (
-            <div className="text-center py-12 bg-muted/30 rounded-lg">
-              <p className="text-muted-foreground text-lg">
-                No petitions at the moment. Why not start one?
-              </p>
-            </div>
-          ) : (
-            <PetitionGrid
-              petitions={filteredPetitions}
-              isLoading={isSearchLoading}
+      {rows.length === 0 ? (
+        <div className="container mx-auto px-6">
+          <div className="text-center py-12 bg-muted/30 rounded-lg">
+            <p className="text-muted-foreground text-lg">
+              No petitions at the moment. Why not start one?
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="relative flex flex-col gap-14">
+          {rows.map((row) => (
+            <PetitionCarouselSection
+              key={row.title}
+              {...row}
               onPetitionClick={handlePetitionClick}
             />
-          )}
+          ))}
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -68,6 +68,7 @@ import PetitionForm, {
   formSchema,
   FormValues,
 } from "../PetitionForm/PetitionForm";
+import { SubmitForReviewDialog } from "../PetitionForm/SubmitForReviewDialog";
 import dynamic from "next/dynamic";
 import { PlusIcon, MoreHorizontalIcon } from "lucide-react";
 import "react-quill-new/dist/quill.snow.css";
@@ -157,6 +158,7 @@ const PetitionPageClient: React.FC<PetitionPageClientProps> = ({
   const [responseContent, setResponseContent] = React.useState("");
   const [isRejectDialogOpen, setIsRejectDialogOpen] = React.useState(false);
   const [isReturnDialogOpen, setIsReturnDialogOpen] = React.useState(false);
+  const [isSubmitDialogOpen, setIsSubmitDialogOpen] = React.useState(false);
   const [rejectReason, setRejectReason] = React.useState("");
 
   React.useEffect(() => {
@@ -348,6 +350,7 @@ const PetitionPageClient: React.FC<PetitionPageClientProps> = ({
       await publishPetition(petition.id);
       toast.success("Petition submitted for review");
       setPetition({ ...petition, status: PetitionStatus.NeedsReview });
+      setIsSubmitDialogOpen(false);
     } catch (error) {
       console.error(error);
       toast.error(
@@ -970,7 +973,7 @@ const PetitionPageClient: React.FC<PetitionPageClientProps> = ({
                       {petition.status === PetitionStatus.New && (
                         <div>
                           <Button
-                            onClick={handlePublish}
+                            onClick={() => setIsSubmitDialogOpen(true)}
                             disabled={isLoadingSign || isEditing}
                             className="w-full bg-green-600 hover:bg-green-700 text-white"
                           >
@@ -1056,7 +1059,7 @@ const PetitionPageClient: React.FC<PetitionPageClientProps> = ({
                             Returned for Changes
                           </Button>
                           <Button
-                            onClick={handlePublish}
+                            onClick={() => setIsSubmitDialogOpen(true)}
                             disabled={isLoadingSign || isEditing}
                             className="w-full bg-green-600 hover:bg-green-700 text-white"
                           >
@@ -1120,6 +1123,13 @@ const PetitionPageClient: React.FC<PetitionPageClientProps> = ({
         <div className="flex flex-col gap-4 p-4 lg:sticky lg:top-4">
           {content}
         </div>
+
+        <SubmitForReviewDialog
+          open={isSubmitDialogOpen}
+          onOpenChange={setIsSubmitDialogOpen}
+          onConfirm={handlePublish}
+          isSubmitting={isLoadingSign}
+        />
 
         <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>
           <DialogContent>

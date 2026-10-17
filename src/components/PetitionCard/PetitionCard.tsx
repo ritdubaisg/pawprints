@@ -10,6 +10,8 @@ import {
 import { Badge } from "../ui/badge";
 import { CategoryBadge } from "@/lib/category-colors";
 import { PetitionStatus } from "../../types/petition";
+import { CheckCircle2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface PetitionCardProps {
   id?: number;
@@ -20,6 +22,7 @@ interface PetitionCardProps {
   status?: number;
   expires?: string;
   showStatus?: boolean;
+  hasResponse?: boolean;
   onClick?: () => void;
 }
 
@@ -32,6 +35,7 @@ const PetitionCard: React.FC<PetitionCardProps> = ({
   status,
   expires,
   showStatus = false,
+  hasResponse = false,
   onClick,
 }) => {
   const { isVisited } = useVisitedPetitions();
@@ -47,13 +51,11 @@ const PetitionCard: React.FC<PetitionCardProps> = ({
     progressPercentage = 5;
   }
   const remainingSignatures = Math.max(targetSignatures - currentSignatures, 0);
+  const thresholdMet = currentSignatures >= targetSignatures;
 
-  const getProgressBarColor = () => {
-    if (currentSignatures >= targetSignatures) {
-      return "bg-green-500";
-    }
-    return "bg-orange-500";
-  };
+  // A response is the end goal of a petition, so it outranks the threshold:
+  // a responded card is green whether or not it ever reached its target.
+  const milestone = hasResponse ? "responded" : thresholdMet ? "met" : null;
 
   const getStatusConfig = (s?: number) => {
     if (s === undefined) return null;
@@ -95,7 +97,7 @@ const PetitionCard: React.FC<PetitionCardProps> = ({
 
   return (
     <Card
-      className={`h-full flex flex-col hover:shadow-lg transition-all duration-300 cursor-pointer relative overflow-hidden ${
+      className={`h-full flex flex-col hover:shadow-lg transition-all duration-300 cursor-pointer relative overflow-hidden isolate ${
         isExpired
           ? "bg-gray-200/50 dark:bg-gray-800/50 opacity-75 grayscale"
           : visited
@@ -104,6 +106,19 @@ const PetitionCard: React.FC<PetitionCardProps> = ({
       }`}
       onClick={onClick}
     >
+      {milestone && (
+        // `isolate` on the card lets this sit behind the content without
+        // dropping behind the card's own background.
+        <div
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute inset-x-0 top-0 -z-10 h-28 bg-linear-to-b to-transparent",
+            milestone === "responded"
+              ? "from-emerald-500/20 dark:from-emerald-400/15"
+              : "from-orange-500/20 dark:from-orange-400/15",
+          )}
+        />
+      )}
       <CardHeader className="font-mono uppercase pb-2">
         {statusConfig && (
           <div className="mb-2">
@@ -117,11 +132,20 @@ const PetitionCard: React.FC<PetitionCardProps> = ({
         )}
         <div className="flex justify-between items-center text-sm text-muted-foreground mb-1">
           <span>{currentSignatures} Signatures</span>
-          <span className="font-medium text-foreground">
-            {currentSignatures >= targetSignatures
-              ? "Threshold Met"
-              : `Needs ${remainingSignatures} More`}
-          </span>
+          {milestone === "responded" ? (
+            <span className="flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-400">
+              <CheckCircle2 className="h-4 w-4" />
+              Responded
+            </span>
+          ) : milestone === "met" ? (
+            <span className="font-semibold text-orange-700 dark:text-orange-400">
+              Threshold Met
+            </span>
+          ) : (
+            <span className="font-medium text-foreground">
+              Needs {remainingSignatures} More
+            </span>
+          )}
         </div>
       </CardHeader>
 
@@ -134,7 +158,10 @@ const PetitionCard: React.FC<PetitionCardProps> = ({
       </CardFooter>
       <div className="absolute bottom-0 left-0 w-full h-2 bg-muted">
         <div
-          className={`h-full transition-all duration-300 ${getProgressBarColor()}`}
+          className={cn(
+            "h-full transition-all duration-300",
+            milestone === "responded" ? "bg-emerald-500" : "bg-orange-500",
+          )}
           style={{ width: `${progressPercentage}%` }}
         />
       </div>

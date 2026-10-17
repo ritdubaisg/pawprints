@@ -1,14 +1,13 @@
 "use client";
-import React, { useState } from "react";
-import { Input } from "../ui/input";
+import React from "react";
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
   InputGroupInput,
 } from "../ui/input-group";
-import { SearchIcon } from "lucide-react";
-import { ButtonGroup } from "../ui/button-group";
+import { SearchIcon, X } from "lucide-react";
+import { Button } from "../ui/button";
 import {
   Select,
   SelectContent,
@@ -17,65 +16,70 @@ import {
   SelectValue,
 } from "../ui/select";
 import { PETITION_CATEGORIES } from "@/lib/constants";
+import { PETITION_PROGRESS_OPTIONS } from "@/lib/petition-sections";
+
+export const ALL = "All";
 
 interface SearchBarProps {
-  onSearchChange?: (searchTerm: string) => void;
-  onFilterChange?: (filter: string) => void;
-  searchTerm?: string;
-  selectedFilter?: string;
+  searchTerm: string;
+  selectedFilter: string;
+  selectedStatus: string;
+  onSearchChange: (searchTerm: string) => void;
+  onFilterChange: (filter: string) => void;
+  onStatusChange: (status: string) => void;
+  onClearAll: () => void;
 }
 
+/**
+ * Fully controlled: the parent owns every value, so "clear" from anywhere on
+ * the page actually clears what is shown here.
+ */
 const SearchBar: React.FC<SearchBarProps> = ({
+  searchTerm,
+  selectedFilter,
+  selectedStatus,
   onSearchChange,
   onFilterChange,
-  searchTerm = "",
-  selectedFilter = "All",
+  onStatusChange,
+  onClearAll,
 }) => {
-  const [localSearchTerm, setLocalSearchTerm] = useState(searchTerm);
-  const [localSelectedFilter, setLocalSelectedFilter] =
-    useState(selectedFilter);
-
-  const handleSearchChange = (value: string) => {
-    setLocalSearchTerm(value);
-    onSearchChange?.(value);
-  };
-
-  const handleFilterChange = (value: string) => {
-    console.log(value);
-    setLocalSelectedFilter(value);
-    onFilterChange?.(value);
-  };
+  const hasActiveFilters =
+    searchTerm !== "" || selectedFilter !== ALL || selectedStatus !== ALL;
 
   return (
-    <div className="w-full">
-      <ButtonGroup className="w-full">
-        <InputGroup className="w-2/3">
-          <InputGroupInput
-            type="text"
-            placeholder="Search petitions"
-            value={localSearchTerm}
-            onChange={(e: { target: { value: string } }) =>
-              handleSearchChange(e.target.value)
-            }
-          />
-          <InputGroupAddon>
-            <SearchIcon />
-          </InputGroupAddon>
+    <div className="flex w-full flex-col gap-2 lg:flex-row">
+      <InputGroup className="lg:flex-1">
+        <InputGroupInput
+          type="text"
+          placeholder="Search petitions"
+          value={searchTerm}
+          onChange={(e: { target: { value: string } }) =>
+            onSearchChange(e.target.value)
+          }
+        />
+        <InputGroupAddon>
+          <SearchIcon />
+        </InputGroupAddon>
+        {searchTerm !== "" && (
           <InputGroupAddon align="inline-end">
             <InputGroupButton
-              disabled={localSearchTerm.trim() === ""}
-              onClick={() => handleSearchChange(localSearchTerm)}
+              size="icon-xs"
+              aria-label="Clear search"
+              onClick={() => onSearchChange("")}
             >
-              Search
+              <X />
             </InputGroupButton>
           </InputGroupAddon>
-        </InputGroup>
+        )}
+      </InputGroup>
 
-        <Select onValueChange={handleFilterChange}>
-          <SelectTrigger className="w-1/3">
-            <SelectValue placeholder={`Filter: ${localSelectedFilter}`} />
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Select value={selectedFilter} onValueChange={onFilterChange}>
+          <SelectTrigger className="w-full sm:flex-1 lg:w-56">
+            <SelectValue placeholder="Category" />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value={ALL}>All categories</SelectItem>
             {PETITION_CATEGORIES.map((category) => (
               <SelectItem key={category} value={category}>
                 {category}
@@ -83,7 +87,28 @@ const SearchBar: React.FC<SearchBarProps> = ({
             ))}
           </SelectContent>
         </Select>
-      </ButtonGroup>
+
+        <Select value={selectedStatus} onValueChange={onStatusChange}>
+          <SelectTrigger className="w-full sm:flex-1 lg:w-44">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All statuses</SelectItem>
+            {PETITION_PROGRESS_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {hasActiveFilters && (
+          <Button variant="ghost" onClick={onClearAll} className="gap-1">
+            <X className="h-4 w-4" />
+            Clear
+          </Button>
+        )}
+      </div>
     </div>
   );
 };

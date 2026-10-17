@@ -39,7 +39,7 @@ export default function AboutPage() {
             <p>
               Search for petitions and if a petition similar to yours already
               exists, sign that petition. This will help raise support for your
-              issue and help you better reach the minimum threshold of 100
+              issue and help you better reach the minimum threshold of
               signatures for receiving an official Student Government response.
             </p>
 

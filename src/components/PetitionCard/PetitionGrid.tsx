@@ -3,8 +3,8 @@
 import React from "react";
 import PetitionCard from "./PetitionCard";
 import { Petition } from "../../types/petition";
-import { PETITION_THRESHOLD } from "@/lib/constants";
 import { rememberPetitionPreview } from "@/lib/petition-preview";
+import { hasResponse, targetOf } from "@/lib/petition-sections";
 import { Skeleton } from "../ui/skeleton";
 import { Card, CardContent, CardFooter, CardHeader } from "../ui/card";
 
@@ -35,6 +35,37 @@ const PetitionCardSkeleton = () => (
   </Card>
 );
 
+/** A PetitionCard fed from a list's Petition, shared by the grid and carousels. */
+export function PetitionListCard({
+  petition,
+  showStatus = false,
+  onClick,
+}: {
+  petition: Petition;
+  showStatus?: boolean;
+  onClick: (petition: Petition) => void;
+}) {
+  return (
+    <PetitionCard
+      id={petition.id}
+      title={petition.title}
+      currentSignatures={petition.signatures}
+      targetSignatures={targetOf(petition)}
+      category={petition.tags[0]?.name || "General"}
+      status={petition.status}
+      expires={petition.expires}
+      showStatus={showStatus}
+      hasResponse={hasResponse(petition)}
+      onClick={() => {
+        // What the destination can show instantly, before it has
+        // fetched anything. See lib/petition-preview.ts.
+        rememberPetitionPreview(petition);
+        onClick(petition);
+      }}
+    />
+  );
+}
+
 const PetitionGrid: React.FC<PetitionGridProps> = ({
   petitions,
   isLoading = false,
@@ -64,22 +95,11 @@ const PetitionGrid: React.FC<PetitionGridProps> = ({
     <div className="w-full">
       <div className={`grid ${gridCols} gap-6 auto-rows-fr`}>
         {petitions.map((petition) => (
-          <PetitionCard
+          <PetitionListCard
             key={petition.id}
-            id={petition.id}
-            title={petition.title}
-            currentSignatures={petition.signatures}
-            targetSignatures={petition.targetSignatures || PETITION_THRESHOLD}
-            category={petition.tags[0]?.name || "General"}
-            status={petition.status}
-            expires={petition.expires}
+            petition={petition}
             showStatus={showStatus}
-            onClick={() => {
-              // What the destination can show instantly, before it has
-              // fetched anything. See lib/petition-preview.ts.
-              rememberPetitionPreview(petition);
-              onPetitionClick(petition);
-            }}
+            onClick={onPetitionClick}
           />
         ))}
       </div>

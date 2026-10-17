@@ -11,11 +11,12 @@ export default function ExploreLoading() {
       <Skeleton className="h-10 w-56" />
       <Skeleton className="mt-2 h-5 w-80 max-w-full" />
       <div className="mt-8 flex w-full flex-col gap-4">
-        <Skeleton className="h-11 w-full max-w-2xl rounded-md" />
-        <div className="flex flex-wrap gap-2">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <Skeleton key={index} className="h-8 w-28 rounded-full" />
-          ))}
+        <div className="flex flex-col gap-2 lg:flex-row">
+          <Skeleton className="h-9 w-full rounded-md lg:flex-1" />
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Skeleton className="h-9 w-full rounded-md sm:flex-1 lg:w-56" />
+            <Skeleton className="h-9 w-full rounded-md sm:flex-1 lg:w-44" />
+          </div>
         </div>
         <PetitionGridSkeleton count={9} className="mt-4" />
       </div>
