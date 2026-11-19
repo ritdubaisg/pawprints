@@ -45,20 +45,10 @@ const EDGE =
   "2xl:[--edge:calc((100%_-_96rem)/2_+_1.5rem)]";
 
 /**
- * Embla can only loop when the slides more than fill the viewport, and the
- * viewport here is the whole page width. A few cards at a quarter of the
- * container each fall short on a wide screen, so short rows are repeated
- * until there are enough to wrap — the same trick Netflix plays.
- */
-const MIN_LOOP_SLIDES = 12;
-
-/**
- * One titled row of petitions on the home page, Netflix style: it wraps
- * around endlessly, the arrows turn a whole page of cards at a time, and the
- * dashes beside the title light up for whichever petitions are on screen.
- * The back arrow stays hidden until the row has moved, because until then
- * there is nothing "back" to go to. Arrows are desktop-only; on touch screens
- * the next card peeks in from the edge to say "swipe" instead.
+ * One titled row of petitions on the home page. The arrows turn a whole page
+ * of cards at a time and stop at either end, and the dashes beside the title
+ * light up for whichever petitions are on screen. Arrows are desktop-only; on
+ * touch screens the next card peeks in from the edge to say "swipe" instead.
  */
 export default function PetitionCarouselSection({
   title,
@@ -68,15 +58,13 @@ export default function PetitionCarouselSection({
   const rootRef = useRef<HTMLDivElement>(null);
   const [api, setApi] = useState<CarouselApi>();
   const [inView, setInView] = useState<Set<number>>(new Set([0]));
-  const [hasMoved, setHasMoved] = useState(false);
+  const [canScrollPrev, setCanScrollPrev] = useState(false);
+  const [canScrollNext, setCanScrollNext] = useState(false);
 
   const count = petitions.length;
-  const loop = count > 1;
-  const copies = loop ? Math.ceil(MIN_LOOP_SLIDES / count) : 1;
 
   const opts = useMemo(
     () => ({
-      loop,
       // A card counts as "on screen" for the indicator once it is mostly in
       // view, so the sliver peeking in at the edge does not light a dash.
       inViewThreshold: 0.9,
@@ -90,7 +78,7 @@ export default function PetitionCarouselSection({
           : 0;
       },
     }),
-    [loop],
+    [],
   );
 
   useEffect(() => {
@@ -98,35 +86,28 @@ export default function PetitionCarouselSection({
 
     const sync = () => {
       const visible = api.slidesInView();
-      // Copies of a petition share its dash.
       setInView(
-        new Set(
-          visible.length > 0
-            ? visible.map((index) => index % count)
-            : [api.selectedScrollSnap() % count],
-        ),
+        new Set(visible.length > 0 ? visible : [api.selectedScrollSnap()]),
       );
+      setCanScrollPrev(api.canScrollPrev());
+      setCanScrollNext(api.canScrollNext());
     };
-    const markMoved = () => setHasMoved(true);
 
     sync();
     api.on("slidesInView", sync).on("select", sync).on("reInit", sync);
-    api.on("pointerDown", markMoved).on("select", markMoved);
     return () => {
       api.off("slidesInView", sync).off("select", sync).off("reInit", sync);
-      api.off("pointerDown", markMoved).off("select", markMoved);
     };
   }, [api, count]);
 
-  // Turn a full page, like Netflix, rather than nudging one card along.
+  // Turn a full page rather than nudging one card along, stopping at the ends.
   const page = useCallback(
     (direction: 1 | -1) => {
       if (!api) return;
       const perPage = Math.max(api.slidesInView().length, 1);
-      const total = api.scrollSnapList().length;
-      const target =
-        (api.selectedScrollSnap() + direction * perPage + total) % total;
-      api.scrollTo(target);
+      const last = api.scrollSnapList().length - 1;
+      const target = api.selectedScrollSnap() + direction * perPage;
+      api.scrollTo(Math.min(Math.max(target, 0), last));
     },
     [api],
   );
@@ -134,9 +115,6 @@ export default function PetitionCarouselSection({
   if (count === 0) return null;
 
   const headingId = `section-${title.toLowerCase().replace(/\W+/g, "-")}`;
-  const slides = Array.from({ length: copies }, (_, copy) =>
-    petitions.map((petition) => ({ petition, copy })),
-  ).flat();
 
   return (
     <section aria-labelledby={headingId}>
@@ -145,7 +123,7 @@ export default function PetitionCarouselSection({
           <h2 id={headingId} className="min-w-0 text-xl sm:text-2xl font-bold tracking-tight">
             {title}
           </h2>
-          {loop && (
+          {(canScrollPrev || canScrollNext) && (
             <div className="flex shrink-0 items-center gap-3">
               <div className="flex items-center gap-1" aria-hidden>
                 {petitions.map((petition, index) => (
@@ -164,12 +142,9 @@ export default function PetitionCarouselSection({
                 <Button
                   variant="outline"
                   size="icon"
-                  className={cn(
-                    "size-8 rounded-full transition-opacity",
-                    !hasMoved && "pointer-events-none opacity-0",
-                  )}
+                  className="size-8 rounded-full"
                   onClick={() => page(-1)}
-                  tabIndex={hasMoved ? 0 : -1}
+                  disabled={!canScrollPrev}
                 >
                   <ArrowLeft />
                   <span className="sr-only">Previous petitions</span>
@@ -179,6 +154,7 @@ export default function PetitionCarouselSection({
                   size="icon"
                   className="size-8 rounded-full"
                   onClick={() => page(1)}
+                  disabled={!canScrollNext}
                 >
                   <ArrowRight />
                   <span className="sr-only">Next petitions</span>
@@ -188,12 +164,9 @@ export default function PetitionCarouselSection({
           )}
         </div>
         <CarouselContent className="ml-0 py-2 pl-[calc(var(--edge)_-_1rem)] pr-(--edge)">
-          {slides.map(({ petition, copy }) => (
+          {petitions.map((petition) => (
             <CarouselItem
-              key={`${copy}-${petition.id}`}
-              // Repeats exist only to make the loop seamless; screen readers
-              // get each petition once.
-              aria-hidden={copy > 0 || undefined}
+              key={petition.id}
               className="basis-[85%] sm:basis-1/2 lg:basis-1/3 xl:basis-1/4"
             >
               <PetitionListCard petition={petition} onClick={onPetitionClick} />
